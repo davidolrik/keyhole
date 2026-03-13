@@ -1,0 +1,52 @@
+[tools]
+go = "1.26.1"
+node = "latest"
+prek = "latest"
+
+[hooks]
+postinstall = ["git config --unset-all core.hooksPath || true", "rm -f .git/hooks/pre-commit*", "prek install"]
+
+[tasks.help]
+description = "📚 Help"
+alias = "default"
+run = '''# mise tasks --local
+  echo " _  __          _           _      "
+  echo "| |/ /___ _   _| |__   ___ | | ___ "
+  echo "| ' // _ \ | | | '_ \ / _ \| |/ _ \\"
+  echo "| . \  __/ |_| | | | | (_) | |  __/"
+  echo "|_|\_\___|\__, |_| |_|\___/|_|\___|"
+  echo "         |___/                     "
+  echo "  SSH Secret manager"
+  echo ""
+  mise tasks --local
+'''
+
+[tasks.build]
+description = "🛠️  Build binary"
+run = ["go mod tidy", "go build ."]
+
+[tasks."build:snapshot"]
+description = "🧪 Build snapshot"
+run = ["goreleaser build --snapshot --clean"]
+
+[tasks."docs:server"]
+description = "🚀 Run documentation server"
+run = ["npm run docs:dev"]
+
+[tasks."docs:build"]
+description = "🛠️ Build documentation"
+run = ["npm run docs:build"]
+
+[tasks."docs:preview"]
+description = "👀 Preview doc site"
+depends = "docs:build"
+run = ["npm run docs:preview"]
+
+[tasks."docs:publish"]
+description = "📦 Publish to go.olrik.dev/keyhole"
+depends = "docs:build"
+run = ["rsync -avO --no-perms --delete ./docs/.vitepress/dist/ {{ env.DOCUMENTATION_HOST }}:{{ env.DOCUMENTATION_PATH }}"]
+
+[tasks."github:publish"]
+description = "📦 Publish to GitHub"
+run = ["git push", "git push --tags"]

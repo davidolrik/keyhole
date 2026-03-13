@@ -1,0 +1,46 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X go.olrik.dev/keyhole/cmd.Version={{.Version}}
+
+dockers:
+  - image_templates:
+      - ghcr.io/davidolrik/keyhole:{{ .Version }}-amd64
+      - ghcr.io/davidolrik/keyhole:latest-amd64
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+    goarch: amd64
+  - image_templates:
+      - ghcr.io/davidolrik/keyhole:{{ .Version }}-arm64
+      - ghcr.io/davidolrik/keyhole:latest-arm64
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+    goarch: arm64
+
+docker_manifests:
+  - name_template: ghcr.io/davidolrik/keyhole:{{ .Version }}
+    image_templates:
+      - ghcr.io/davidolrik/keyhole:{{ .Version }}-amd64
+      - ghcr.io/davidolrik/keyhole:{{ .Version }}-arm64
+  - name_template: ghcr.io/davidolrik/keyhole:latest
+    image_templates:
+      - ghcr.io/davidolrik/keyhole:latest-amd64
+      - ghcr.io/davidolrik/keyhole:latest-arm64
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
