@@ -724,9 +724,14 @@ func requireAgent(sess ssh.Session) (agent.ExtendedAgent, func(), error) {
 		return nil, nil, fmt.Errorf("connect to agent socket: %w", err)
 	}
 
+	// The listener's address is the socket path inside a temp directory
+	// created by ssh.NewAgentListener (e.g. /tmp/auth-agentXXX/listener.sock).
+	// Closing the listener removes the socket but leaves the directory behind.
+	agentDir := filepath.Dir(l.Addr().String())
 	cleanup := func() {
-		conn.Close() // closing conn causes io.Copy loops in ForwardAgentConnections to exit
-		l.Close()    // causes l.Accept() to return, stopping the ForwardAgentConnections goroutine
+		conn.Close()          // closing conn causes io.Copy loops in ForwardAgentConnections to exit
+		l.Close()             // causes l.Accept() to return, stopping the ForwardAgentConnections goroutine
+		os.RemoveAll(agentDir) // remove the temp directory left behind by NewAgentListener
 	}
 	return agent.NewClient(conn), cleanup, nil
 }

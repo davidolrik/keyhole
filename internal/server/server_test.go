@@ -1009,6 +1009,43 @@ func TestMovePersonalToVault(t *testing.T) {
 	}
 }
 
+func TestAgentTempDirCleanup(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	// Snapshot existing auth-agent dirs before our operations
+	before, err := filepath.Glob(filepath.Join(os.TempDir(), "auth-agent*"))
+	if err != nil {
+		t.Fatalf("glob before: %v", err)
+	}
+	beforeSet := make(map[string]bool, len(before))
+	for _, d := range before {
+		beforeSet[d] = true
+	}
+
+	// Run set and get — both use agent forwarding which creates temp dirs
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/cleanup-test", "val"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if _, err := sshRun(t, addr, alice.cfg, alice.ag, "get account/cleanup-test"); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	// Check for leftover auth-agent dirs that weren't there before
+	after, err := filepath.Glob(filepath.Join(os.TempDir(), "auth-agent*"))
+	if err != nil {
+		t.Fatalf("glob after: %v", err)
+	}
+	var leftover []string
+	for _, d := range after {
+		if !beforeSet[d] {
+			leftover = append(leftover, d)
+		}
+	}
+	if len(leftover) > 0 {
+		t.Errorf("agent temp dirs not cleaned up: %v", leftover)
+	}
+}
+
 func TestHelpIncludesVaultCommands(t *testing.T) {
 	addr, alice := testServerSetup(t)
 
