@@ -1,13 +1,9 @@
-import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { defineConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
 
-const rootGo = resolve(import.meta.dirname, "../../cmd/root.go");
-const versionMatch = readFileSync(rootGo, "utf-8").match(
-  /var Version = "([^"]+)"/,
-);
-const version = versionMatch?.[1] ?? "dev";
+const version = execSync("git describe --tags --abbrev=0").toString().trim();
 const releaseUrl =
   `https://github.com/davidolrik/keyhole/releases/tag/${version}`;
 
