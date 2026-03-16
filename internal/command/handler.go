@@ -90,6 +90,8 @@ func (h *Handler) Handle(sess ssh.Session, username string, pubKey gossh.PublicK
 		return h.handleVaultMembers(sess, username, cmd.Vault)
 	case OpVaultList:
 		return h.handleVaultListAll(sess, username)
+	case OpVaultDestroy:
+		return h.handleVaultDestroy(sess, username, cmd.Vault)
 	case OpMove:
 		return h.handleMove(sess, username, pubKey, cmd)
 	case OpHelp:
@@ -415,6 +417,33 @@ func (h *Handler) handleVaultListAll(sess ssh.Session, username string) error {
 	return nil
 }
 
+func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName string) error {
+	if vaultName == "personal" {
+		return fmt.Errorf("cannot destroy the personal vault")
+	}
+
+	fmt.Fprintf(sess, "WARNING: This will permanently destroy vault %q and all its secrets.\n", vaultName)
+	fmt.Fprintln(sess, "This action cannot be undone.")
+	fmt.Fprintf(sess, "\nType the vault name to confirm: ")
+
+	confirmation, err := readLine(sess)
+	if err != nil {
+		return fmt.Errorf("read confirmation: %w", err)
+	}
+
+	if strings.TrimSpace(string(confirmation)) != vaultName {
+		fmt.Fprintln(sess, "Destroy cancelled.")
+		return nil
+	}
+
+	if err := h.vaultMgr.Destroy(vaultName, username); err != nil {
+		return fmt.Errorf("destroy vault: %w", err)
+	}
+
+	fmt.Fprintf(sess, "Vault %q destroyed.\n", vaultName)
+	return nil
+}
+
 func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.PublicKey, cmd Command) error {
 	ag, cleanup, err := requireAgent(sess)
 	if err != nil {
@@ -674,6 +703,7 @@ func helpText(color bool, version string) string {
 		cmd2("vault accept", yellow+"<name> <token>"+reset, "Accept vault invite") +
 		cmd2("vault promote", yellow+"<name> <user>"+reset, "Promote member to admin") +
 		cmd2("vault members", yellow+"<name>"+reset, "List vault members") +
+		cmd2("vault destroy", yellow+"<name>"+reset, "Permanently destroy a vault "+dim+"[owner]"+reset) +
 		cmd2("vault list", "", "List your vaults") +
 		"\n" +
 		bold + "NOTES\n" + reset +

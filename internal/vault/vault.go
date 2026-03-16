@@ -290,6 +290,22 @@ func (m *Manager) Promote(name, promoter, targetUser string) error {
 	return m.store.WriteVaultMembers(name, membersJSON)
 }
 
+// Destroy permanently deletes a vault. Only the vault owner can do this.
+func (m *Manager) Destroy(name, username string) error {
+	data, err := m.store.ReadVaultMeta(name)
+	if err != nil {
+		return fmt.Errorf("read vault meta: %w", err)
+	}
+	var meta vaultMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return fmt.Errorf("unmarshal meta: %w", err)
+	}
+	if meta.Owner != username {
+		return fmt.Errorf("only the vault owner can destroy a vault")
+	}
+	return m.store.DeleteVault(name)
+}
+
 // deriveTokenKey derives an AES-256 key from an invite token using HKDF-SHA256.
 func deriveTokenKey(tokenBytes []byte) []byte {
 	reader := hkdf.New(sha256.New, tokenBytes, nil, []byte("keyhole-vault-invite-v1"))

@@ -22,6 +22,7 @@ const (
 	OpVaultPromote
 	OpVaultMembers
 	OpVaultList
+	OpVaultDestroy
 	OpMove
 )
 
@@ -52,6 +53,8 @@ func (op Op) String() string {
 		return "vault members"
 	case OpVaultList:
 		return "vault list"
+	case OpVaultDestroy:
+		return "vault destroy"
 	case OpMove:
 		return "move"
 	default:
@@ -209,7 +212,7 @@ func parseListArg(arg string) (Command, error) {
 // parseVaultSubcommand parses "vault <subcommand> ..." args.
 func parseVaultSubcommand(args []string) (Command, error) {
 	if len(args) == 0 {
-		return Command{}, fmt.Errorf("vault requires a subcommand: create, invite, accept, promote, members, list")
+		return Command{}, fmt.Errorf("vault requires a subcommand: create, invite, accept, promote, members, list, destroy")
 	}
 
 	sub := args[0]
@@ -251,6 +254,12 @@ func parseVaultSubcommand(args []string) (Command, error) {
 			return Command{}, fmt.Errorf("vault list takes no arguments")
 		}
 		return Command{Op: OpVaultList}, nil
+
+	case "destroy":
+		if len(subArgs) != 1 {
+			return Command{}, fmt.Errorf("vault destroy requires exactly one name argument")
+		}
+		return Command{Op: OpVaultDestroy, Vault: subArgs[0]}, nil
 
 	default:
 		return Command{}, fmt.Errorf("unknown vault subcommand %q", sub)

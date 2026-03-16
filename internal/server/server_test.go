@@ -1082,6 +1082,96 @@ func TestHelpIncludesVersion(t *testing.T) {
 	}
 }
 
+func TestVaultDestroyByOwner(t *testing.T) {
+	addr, alice, _ := testServerSetupMultiUser(t)
+
+	// Create vault and set a secret
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create doomed")
+	sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set doomed:secret/key", "value")
+
+	// Destroy the vault — type vault name to confirm
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy doomed", "doomed\n")
+	if err != nil {
+		t.Fatalf("vault destroy: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "destroyed") {
+		t.Errorf("vault destroy output = %q, expected 'destroyed'", out)
+	}
+
+	// vault list should no longer include "doomed"
+	listOut, err := sshRun(t, addr, alice.cfg, alice.ag, "vault list")
+	if err != nil {
+		t.Fatalf("vault list: %v", err)
+	}
+	if strings.Contains(listOut, "doomed") {
+		t.Errorf("vault list still contains 'doomed' after destroy: %q", listOut)
+	}
+
+	// get on the vault secret should fail
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "get doomed:secret/key")
+	if err == nil {
+		t.Error("expected error getting secret from destroyed vault")
+	}
+}
+
+func TestVaultDestroyNonOwnerFails(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	// Alice creates vault and invites Bob
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create protected")
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite protected bob")
+	token := strings.TrimSpace(tokenOut)
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept protected "+token)
+
+	// Bob (member) attempts destroy — should fail
+	_, err := sshRunWithStdin(t, addr, bob.cfg, bob.ag, "vault destroy protected", "protected\n")
+	if err == nil {
+		t.Error("expected error when non-owner tries to destroy vault")
+	}
+
+	// Vault should still exist
+	listOut, err := sshRun(t, addr, alice.cfg, alice.ag, "vault list")
+	if err != nil {
+		t.Fatalf("vault list: %v", err)
+	}
+	if !strings.Contains(listOut, "protected") {
+		t.Errorf("vault list missing 'protected' after failed destroy: %q", listOut)
+	}
+}
+
+func TestVaultDestroyCancelledOnMismatch(t *testing.T) {
+	addr, alice, _ := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create keepsafe")
+
+	// Send wrong name at confirmation
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy keepsafe", "wrong-name\n")
+	if err != nil {
+		t.Fatalf("vault destroy (mismatch): %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "cancelled") {
+		t.Errorf("vault destroy mismatch output = %q, expected 'cancelled'", out)
+	}
+
+	// Vault should still exist
+	listOut, err := sshRun(t, addr, alice.cfg, alice.ag, "vault list")
+	if err != nil {
+		t.Fatalf("vault list: %v", err)
+	}
+	if !strings.Contains(listOut, "keepsafe") {
+		t.Errorf("vault list missing 'keepsafe' after cancelled destroy: %q", listOut)
+	}
+}
+
+func TestVaultDestroyPersonalRejected(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	_, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy personal", "personal\n")
+	if err == nil {
+		t.Error("expected error when trying to destroy personal vault")
+	}
+}
+
 func TestHelpIncludesVaultCommands(t *testing.T) {
 	addr, alice := testServerSetup(t)
 
@@ -1089,7 +1179,7 @@ func TestHelpIncludesVaultCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault members", "vault list", "move"} {
+	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault members", "vault destroy", "vault list", "move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help output missing %q", want)
 		}

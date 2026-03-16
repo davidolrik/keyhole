@@ -47,6 +47,14 @@ Promotes a `member` to `admin`.
 ssh -A alice@keys.example.com vault members team
 ```
 
+## Destroying a vault
+
+```sh
+ssh -A alice@keys.example.com vault destroy team
+```
+
+This permanently deletes the vault and all its secrets. Only the vault owner can destroy a vault. You will be prompted to type the vault name to confirm — this action cannot be undone.
+
 ## Vault secrets
 
 Use colon syntax to target a vault — `vault:path`:

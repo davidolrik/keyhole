@@ -204,6 +204,11 @@ func (s *FileStore) ListVaults() ([]string, error) {
 	return vaults, nil
 }
 
+// DeleteVault removes an entire vault directory and all its contents.
+func (s *FileStore) DeleteVault(vault string) error {
+	return os.RemoveAll(s.vaultDir(vault))
+}
+
 func (s *FileStore) vaultDir(vault string) string {
 	return filepath.Join(s.dataDir, "vaults", vault)
 }
