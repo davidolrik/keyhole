@@ -32,6 +32,7 @@ type Config struct {
 	DataDir      string
 	Admins       []string
 	ServerSecret string // alphanumeric; if empty, loaded from {DataDir}/server_secret
+	Version      string
 }
 
 // Server is the keyhole SSH server.
@@ -70,7 +71,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 
-	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins)
+	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version)
 
 	s := &Server{
 		cfg:          cfg,

@@ -34,10 +34,11 @@ type Handler struct {
 	serverSecret []byte
 	dataDir      string
 	admins       map[string]bool
+	version      string
 }
 
 // NewHandler creates a Handler.
-func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string) *Handler {
+func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string) *Handler {
 	adminSet := make(map[string]bool, len(admins))
 	for _, a := range admins {
 		adminSet[a] = true
@@ -50,6 +51,7 @@ func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.E
 		serverSecret: serverSecret,
 		dataDir:      dataDir,
 		admins:       adminSet,
+		version:      version,
 	}
 }
 
@@ -615,12 +617,12 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 }
 
 func (h *Handler) handleHelp(sess ssh.Session) error {
-	fmt.Fprint(sess, helpText(supportsColor(sess)))
+	fmt.Fprint(sess, helpText(supportsColor(sess), h.version))
 	return nil
 }
 
 // helpText returns the help string, optionally with ANSI colors.
-func helpText(color bool) string {
+func helpText(color bool, version string) string {
 	// ANSI helpers — return empty strings when color is off so the format
 	// strings below are identical in both modes.
 	bold := ansi(color, "\033[1m")
@@ -646,7 +648,12 @@ func helpText(color bool) string {
 		return fmt.Sprintf("  %s%-16s%s %s%s  %s\n", cyan, name, reset, args, pad, desc)
 	}
 
-	return bold + cyan + "keyhole" + reset + " " + gray + "—" + reset + " " + white + "SSH-based secret storage" + reset + "\n" +
+	versionStr := ""
+	if version != "" {
+		versionStr = " " + dim + version + reset
+	}
+
+	return bold + cyan + "Keyhole" + reset + versionStr + " " + gray + "—" + reset + " " + white + "SSH-based secret storage" + reset + "\n" +
 		"\n" +
 		bold + "USAGE\n" + reset +
 		"  " + dim + "ssh [-A] <user>@<host> [-p <port>] <command> [args]" + reset + "\n" +

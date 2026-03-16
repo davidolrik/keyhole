@@ -1046,6 +1046,42 @@ func TestAgentTempDirCleanup(t *testing.T) {
 	}
 }
 
+func TestHelpIncludesVersion(t *testing.T) {
+	dataDir := t.TempDir()
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{
+		DataDir: dataDir,
+		Admins:  []string{"alice"},
+		Version: "v1.2.3",
+	}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	srv.AddUserKey("alice", alice.sshPub)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	out, err := sshRun(t, ln.Addr().String(), alice.cfg, alice.ag, "help")
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "Keyhole") {
+		t.Errorf("help output missing 'Keyhole'; got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "v1.2.3") {
+		t.Errorf("help output missing version 'v1.2.3'; got:\n%s", plain)
+	}
+}
+
 func TestHelpIncludesVaultCommands(t *testing.T) {
 	addr, alice := testServerSetup(t)
 
