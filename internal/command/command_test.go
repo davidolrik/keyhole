@@ -503,6 +503,44 @@ func TestReservedUsernamesRejected(t *testing.T) {
 	}
 }
 
+func TestUsernameAllowlist(t *testing.T) {
+	// Valid usernames
+	valid := []string{"alice", "bob-smith", "user_123", "Alice", "A"}
+	for _, name := range valid {
+		t.Run("valid/"+name, func(t *testing.T) {
+			_, err := command.Parse([]string{"vault", "invite", "tv", name})
+			if err != nil {
+				t.Errorf("expected valid username %q to be accepted, got: %v", name, err)
+			}
+		})
+	}
+
+	// Invalid usernames (control chars, special chars, spaces)
+	invalid := []struct {
+		name string
+		user string
+	}{
+		{"newline", "user\nname"},
+		{"tab", "user\tname"},
+		{"space", "user name"},
+		{"escape", "user\x1bname"},
+		{"null", "user\x00name"},
+		{"colon", "user:name"},
+		{"slash", "user/name"},
+		{"dot", "user.name"},
+		{"backslash", "user\\name"},
+		{"at", "user@name"},
+	}
+	for _, tt := range invalid {
+		t.Run("invalid/"+tt.name, func(t *testing.T) {
+			_, err := command.Parse([]string{"vault", "invite", "tv", tt.user})
+			if err == nil {
+				t.Errorf("expected username %q to be rejected", tt.user)
+			}
+		})
+	}
+}
+
 func TestParsePathNormalization(t *testing.T) {
 	// Paths with redundant slashes should be cleaned
 	got, err := command.Parse([]string{"get", "account//github"})

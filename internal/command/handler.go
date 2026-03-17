@@ -1061,7 +1061,9 @@ var reservedUsernames = map[string]bool{
 	"invites": true,
 }
 
-// validateUsername rejects usernames with path-unsafe characters or reserved names.
+// validateUsername rejects usernames that contain characters outside the safe
+// set [a-zA-Z0-9_-]. An allowlist prevents log injection (newlines, control
+// characters), filesystem edge cases, and terminal escape sequences.
 func validateUsername(username string) error {
 	if username == "" {
 		return fmt.Errorf("username cannot be empty")
@@ -1070,7 +1072,7 @@ func validateUsername(username string) error {
 		return fmt.Errorf("username %q is reserved", username)
 	}
 	for _, c := range username {
-		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
 			return fmt.Errorf("username contains invalid character %q", c)
 		}
 	}
