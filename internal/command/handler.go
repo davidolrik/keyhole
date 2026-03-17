@@ -717,13 +717,14 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("invalid or expired invite code")
 	}
 
-	// Create authorized_keys
+	// Create authorized_keys atomically using O_EXCL to prevent a TOCTOU race
+	// where two concurrent registrations both pass the os.Stat check above.
 	sshDir := filepath.Join(h.dataDir, username, ".ssh")
 	if err := os.MkdirAll(sshDir, 0700); err != nil {
 		return fmt.Errorf("create ssh dir: %w", err)
 	}
-	if err := os.WriteFile(authKeysPath, []byte(authorizedLine), 0600); err != nil {
-		return fmt.Errorf("write authorized_keys: %w", err)
+	if err := writeAuthorizedKeysExclusive(authKeysPath, []byte(authorizedLine)); err != nil {
+		return fmt.Errorf("username %q already exists", username)
 	}
 
 	if h.auditLog != nil {
@@ -1001,6 +1002,22 @@ func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 	case <-time.After(timeout):
 		return nil, fmt.Errorf("read timeout")
 	}
+}
+
+// writeAuthorizedKeysExclusive creates an authorized_keys file exclusively.
+// Returns an error if the file already exists, preventing TOCTOU races
+// during concurrent user registration.
+func writeAuthorizedKeysExclusive(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 
 // generateInviteCode generates a cryptographically random invite code.
