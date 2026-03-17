@@ -101,6 +101,7 @@ func (e *Encryptor) deriveKeyWithSalt(ag agent.ExtendedAgent, pubKey ssh.PublicK
 	if err != nil {
 		return nil, fmt.Errorf("agent sign: %w", err)
 	}
+	defer Zeroize(sig.Blob)
 
 	reader := hkdf.New(sha256.New, sig.Blob, salt, []byte(hkdfInfo))
 	key := make([]byte, keySize)

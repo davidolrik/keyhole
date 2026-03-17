@@ -578,6 +578,7 @@ func (m *Manager) deriveWrappingKeyWithSalt(username, vaultName string, ag agent
 	if err != nil {
 		return nil, fmt.Errorf("agent sign: %w", err)
 	}
+	defer crypto.Zeroize(sig.Blob)
 
 	reader := hkdf.New(sha256.New, sig.Blob, salt, []byte(wrappingHKDFInfo))
 	key := make([]byte, 32)
