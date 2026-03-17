@@ -315,3 +315,45 @@ func TestValidateVaultName(t *testing.T) {
 		}
 	}
 }
+
+func TestInviteTokenDomainSeparation(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+	charlieAg, charliePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+
+	// Create two vaults
+	if err := mgr.Create("vault-a", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create vault-a: %v", err)
+	}
+	if err := mgr.Create("vault-b", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create vault-b: %v", err)
+	}
+
+	// Invite bob to vault-a
+	tokenA, err := mgr.Invite("vault-a", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite bob to vault-a: %v", err)
+	}
+
+	// Invite charlie to vault-b
+	_, err = mgr.Invite("vault-b", "alice", "charlie", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite charlie to vault-b: %v", err)
+	}
+
+	// Bob's token for vault-a should NOT work for charlie on vault-b
+	// (different vault name and username in HKDF info)
+	err = mgr.Accept("vault-b", "charlie", tokenA, charlieAg, charliePub)
+	if err == nil {
+		t.Error("expected error using vault-a token to accept vault-b invite")
+	}
+
+	// Bob's token should work for vault-a
+	if err := mgr.Accept("vault-a", "bob", tokenA, bobAg, bobPub); err != nil {
+		t.Fatalf("Accept vault-a with correct token: %v", err)
+	}
+}

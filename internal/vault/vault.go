@@ -192,7 +192,10 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 	token := fmt.Sprintf("%x", tokenBytes)
 
 	// Derive a wrapping key from the token and encrypt the vault key with it
-	tokenKey := deriveTokenKey(tokenBytes)
+	tokenKey, err := deriveTokenKey(tokenBytes, name, targetUser)
+	if err != nil {
+		return "", fmt.Errorf("derive token key: %w", err)
+	}
 	wrappedWithToken, err := crypto.EncryptWithKey(tokenKey, vaultKey)
 	if err != nil {
 		return "", fmt.Errorf("wrap vault key with token: %w", err)
@@ -220,7 +223,10 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		return fmt.Errorf("invalid invite token: %w", err)
 	}
 
-	tokenKey := deriveTokenKey(tokenRaw)
+	tokenKey, err := deriveTokenKey(tokenRaw, name, username)
+	if err != nil {
+		return fmt.Errorf("derive token key: %w", err)
+	}
 	vaultKey, err := crypto.DecryptWithKey(tokenKey, wrappedWithToken)
 	if err != nil {
 		return fmt.Errorf("decrypt vault key with token: %w", err)
@@ -307,11 +313,14 @@ func (m *Manager) Destroy(name, username string) error {
 }
 
 // deriveTokenKey derives an AES-256 key from an invite token using HKDF-SHA256.
-func deriveTokenKey(tokenBytes []byte) []byte {
-	reader := hkdf.New(sha256.New, tokenBytes, nil, []byte("keyhole-vault-invite-v1"))
+func deriveTokenKey(tokenBytes []byte, vaultName, username string) ([]byte, error) {
+	info := "keyhole-vault-invite-v1:" + vaultName + ":" + username
+	reader := hkdf.New(sha256.New, tokenBytes, nil, []byte(info))
 	key := make([]byte, 32)
-	io.ReadFull(reader, key)
-	return key
+	if _, err := io.ReadFull(reader, key); err != nil {
+		return nil, fmt.Errorf("hkdf derive token key: %w", err)
+	}
+	return key, nil
 }
 
 // hexDecode decodes a hex string to bytes.
