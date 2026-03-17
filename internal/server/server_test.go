@@ -694,6 +694,27 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
+// findDataDir finds the data directory used by testServerSetup.
+func findDataDir(t *testing.T) string {
+	t.Helper()
+	base := t.TempDir()
+	parent := filepath.Dir(filepath.Dir(base))
+	var found string
+	_ = filepath.Walk(parent, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.Name() == "server_secret" {
+			found = filepath.Dir(path)
+		}
+		return nil
+	})
+	if found == "" {
+		t.Fatal("could not find data dir")
+	}
+	return found
+}
+
 // findAuditLog finds the audit.log written by testServerSetup in TestAuditLogWritten.
 // testServerSetup uses t.TempDir(), so we search the test's temp dir hierarchy.
 func findAuditLog(t *testing.T) string {
@@ -1160,6 +1181,32 @@ func TestVaultDestroyCancelledOnMismatch(t *testing.T) {
 	}
 	if !strings.Contains(listOut, "keepsafe") {
 		t.Errorf("vault list missing 'keepsafe' after cancelled destroy: %q", listOut)
+	}
+}
+
+func TestExpiredInviteCodeRejected(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	// Admin generates invite
+	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	inviteCode := strings.TrimSpace(inviteOut)
+
+	// Find the invite file and tamper with its timestamp
+	dataDir := findDataDir(t)
+	invitePath := filepath.Join(dataDir, "invites", inviteCode)
+	expired := time.Now().Add(-96 * time.Hour).UTC().Format(time.RFC3339)
+	if err := os.WriteFile(invitePath, []byte(expired), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Registration should fail with expired code
+	bob := newTestUser(t, "bob")
+	_, err = sshRunWithStdin(t, addr, bob.cfg, nil, "register "+inviteCode, "y\n")
+	if err == nil {
+		t.Error("expected error registering with expired invite code")
 	}
 }
 

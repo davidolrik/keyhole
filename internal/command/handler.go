@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
@@ -23,6 +24,7 @@ const (
 	maxSecretSize   = 64 * 1024 // 64KB
 	maxSetAttempts  = 3
 	inviteCodeBytes = 32
+	inviteCodeTTL   = 72 * time.Hour
 )
 
 // Handler routes parsed commands to storage and crypto operations.
@@ -581,7 +583,7 @@ func (h *Handler) handleInvite(sess ssh.Session, username string) error {
 	}
 
 	invitePath := filepath.Join(inviteDir, code)
-	if err := os.WriteFile(invitePath, []byte{}, 0600); err != nil {
+	if err := os.WriteFile(invitePath, []byte(time.Now().UTC().Format(time.RFC3339)), 0600); err != nil {
 		return fmt.Errorf("write invite: %w", err)
 	}
 
@@ -601,10 +603,18 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("username %q already exists", username)
 	}
 
-	// Validate invite code exists
+	// Validate invite code exists and has not expired
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
-	if _, err := os.Stat(invitePath); err != nil {
+	inviteData, err := os.ReadFile(invitePath)
+	if err != nil {
 		return fmt.Errorf("invalid or expired invite code")
+	}
+	if len(inviteData) > 0 {
+		created, err := time.Parse(time.RFC3339, string(inviteData))
+		if err == nil && time.Since(created) > inviteCodeTTL {
+			os.Remove(invitePath)
+			return fmt.Errorf("invalid or expired invite code")
+		}
 	}
 
 	// Show the connecting key and ask for confirmation
