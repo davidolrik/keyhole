@@ -668,6 +668,10 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
 	inviteData, err := os.ReadFile(invitePath)
 	if err != nil {
+		// Perform equivalent work to the expiration check below so that
+		// "file not found" and "file found but expired" take similar time,
+		// preventing timing side-channels that reveal code existence.
+		time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
 		return fmt.Errorf("invalid or expired invite code")
 	}
 	if len(inviteData) > 0 {

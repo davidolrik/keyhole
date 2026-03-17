@@ -1539,6 +1539,38 @@ func TestRegisterWithBadCodeDoesNotLeakUsername(t *testing.T) {
 	}
 }
 
+func TestExpiredAndNonExistentInviteReturnSameError(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	// Generate a real invite and expire it
+	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	inviteCode := strings.TrimSpace(inviteOut)
+
+	dataDir := findDataDir(t)
+	invitePath := filepath.Join(dataDir, "invites", inviteCode)
+	expired := time.Now().Add(-96 * time.Hour).UTC().Format(time.RFC3339)
+	if err := os.WriteFile(invitePath, []byte(expired), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Try with expired code
+	bob := newTestUser(t, "bob")
+	expiredOut, _ := sshRunWithStdin(t, addr, bob.cfg, nil, "register "+inviteCode, "y\n")
+
+	// Try with non-existent code
+	fakeCode := "kh_0000000000000000000000000000000000000000000000000000000000000000"
+	charlie := newTestUser(t, "charlie")
+	nonExistOut, _ := sshRunWithStdin(t, addr, charlie.cfg, nil, "register "+fakeCode, "y\n")
+
+	// Both should return the same error message
+	if expiredOut != nonExistOut {
+		t.Errorf("error messages differ:\n  expired:     %q\n  non-existent: %q", expiredOut, nonExistOut)
+	}
+}
+
 func TestConnectionRateLimit(t *testing.T) {
 	dataDir := t.TempDir()
 	alice := newTestUser(t, "alice")
