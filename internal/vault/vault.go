@@ -358,6 +358,45 @@ func (m *Manager) Demote(name, demoter, targetUser string) error {
 	return m.store.WriteVaultMembers(name, membersJSON)
 }
 
+// Revoke removes a user from a vault. Only owners and admins can revoke.
+// The owner cannot be revoked. The user's wrapped vault key is also deleted.
+func (m *Manager) Revoke(name, revoker, targetUser string) error {
+	members, err := m.Members(name)
+	if err != nil {
+		return fmt.Errorf("read members: %w", err)
+	}
+
+	revokerRole, ok := members[revoker]
+	if !ok || (revokerRole != RoleOwner && revokerRole != RoleAdmin) {
+		return fmt.Errorf("permission denied: %q is not an owner or admin of vault %q", revoker, name)
+	}
+
+	targetRole, ok := members[targetUser]
+	if !ok {
+		return fmt.Errorf("user %q is not a member of vault %q", targetUser, name)
+	}
+	if targetRole == RoleOwner {
+		return fmt.Errorf("cannot revoke the owner")
+	}
+
+	// Remove from members
+	delete(members, targetUser)
+	membersJSON, err := json.Marshal(members)
+	if err != nil {
+		return fmt.Errorf("marshal members: %w", err)
+	}
+	if err := m.store.WriteVaultMembers(name, membersJSON); err != nil {
+		return fmt.Errorf("write members: %w", err)
+	}
+
+	// Delete the user's wrapped vault key
+	if err := m.store.DeleteVaultKey(name, targetUser); err != nil {
+		// Non-fatal: key may not exist (e.g. pending invite that was never accepted)
+	}
+
+	return nil
+}
+
 // Destroy permanently deletes a vault. Only the vault owner can do this.
 func (m *Manager) Destroy(name, username string) error {
 	data, err := m.store.ReadVaultMeta(name)

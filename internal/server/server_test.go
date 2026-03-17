@@ -1026,6 +1026,82 @@ func TestVaultDemotedAdminCannotInvite(t *testing.T) {
 	}
 }
 
+func TestVaultRevoke(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+
+	// Invite and accept bob
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	token := strings.TrimSpace(tokenOut)
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+token)
+
+	// Store a secret as bob
+	sshRunWithStdin(t, addr, bob.cfg, bob.ag, "set tv:shared/secret", "mysecret\n")
+
+	// Revoke bob
+	out, err := sshRun(t, addr, alice.cfg, alice.ag, "vault revoke tv bob")
+	if err != nil {
+		t.Fatalf("vault revoke: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Revoked") {
+		t.Errorf("vault revoke output = %q, expected 'Revoked'", out)
+	}
+
+	// Bob should no longer be able to access vault secrets
+	_, err = sshRun(t, addr, bob.cfg, bob.ag, "get tv:shared/secret")
+	if err == nil {
+		t.Error("expected error when revoked user accesses vault")
+	}
+
+	// Bob should not appear in members
+	membersOut, err := sshRun(t, addr, alice.cfg, alice.ag, "vault members tv")
+	if err != nil {
+		t.Fatalf("vault members: %v", err)
+	}
+	if strings.Contains(membersOut, "bob") {
+		t.Errorf("bob should not appear in members after revoke: %q", membersOut)
+	}
+}
+
+func TestVaultRevokeNonAdminFails(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+
+	// Invite bob and charlie
+	tokenB, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+strings.TrimSpace(tokenB))
+
+	charlie := newTestUser(t, "charlie")
+	inviteOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	sshRunWithStdin(t, addr, charlie.cfg, nil, "register "+strings.TrimSpace(inviteOut), "y\n")
+
+	tokenC, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv charlie")
+	sshRun(t, addr, charlie.cfg, charlie.ag, "vault accept tv "+strings.TrimSpace(tokenC))
+
+	// Bob (member) cannot revoke charlie
+	_, err := sshRun(t, addr, bob.cfg, bob.ag, "vault revoke tv charlie")
+	if err == nil {
+		t.Error("expected error when member tries to revoke")
+	}
+}
+
+func TestVaultRevokeOwnerFails(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+strings.TrimSpace(tokenOut))
+	sshRun(t, addr, alice.cfg, alice.ag, "vault promote tv bob")
+
+	// Bob (admin) cannot revoke alice (owner)
+	_, err := sshRun(t, addr, bob.cfg, bob.ag, "vault revoke tv alice")
+	if err == nil {
+		t.Error("expected error when trying to revoke the owner")
+	}
+}
+
 func TestVaultMembers(t *testing.T) {
 	addr, alice, bob := testServerSetupMultiUser(t)
 
@@ -1400,7 +1476,7 @@ func TestHelpIncludesVaultCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault demote", "vault members", "vault destroy", "vault list", "move"} {
+	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault demote", "vault revoke", "vault members", "vault destroy", "vault list", "move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help output missing %q", want)
 		}

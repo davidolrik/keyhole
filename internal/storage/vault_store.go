@@ -149,6 +149,16 @@ func (s *FileStore) ReadVaultKey(vault, username string) ([]byte, error) {
 	return data, nil
 }
 
+// DeleteVaultKey removes a user's wrapped vault key.
+func (s *FileStore) DeleteVaultKey(vault, username string) error {
+	fpath := s.vaultKeyPath(vault, username)
+	err := os.Remove(fpath)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return ErrNotFound
+	}
+	return err
+}
+
 // WritePendingInvite writes a pending invite for a user.
 func (s *FileStore) WritePendingInvite(vault, username string, data []byte) error {
 	fpath := s.pendingInvitePath(vault, username)

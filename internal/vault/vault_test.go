@@ -510,3 +510,102 @@ func TestExpiredVaultInvite(t *testing.T) {
 		t.Errorf("error = %q, expected to mention 'expired'", err)
 	}
 }
+
+func TestRevoke(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+
+	// Bob should have access
+	if !mgr.HasAccess("tv", "bob") {
+		t.Fatal("bob should have access before revoke")
+	}
+
+	// Revoke bob
+	if err := mgr.Revoke("tv", "alice", "bob"); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	// Bob should no longer have access
+	if mgr.HasAccess("tv", "bob") {
+		t.Error("bob should not have access after revoke")
+	}
+
+	// Bob's wrapped key file should be deleted
+	_, err := store.ReadVaultKey("tv", "bob")
+	if err == nil {
+		t.Error("bob's vault key should be deleted after revoke")
+	}
+}
+
+func TestRevokeOwnerFails(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	mgr.Promote("tv", "alice", "bob")
+
+	// Cannot revoke the owner
+	err := mgr.Revoke("tv", "bob", "alice")
+	if err == nil {
+		t.Error("expected error revoking the owner")
+	}
+}
+
+func TestMemberCannotRevoke(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+	charlieAg, charliePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	tokenB, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", tokenB, bobAg, bobPub)
+
+	tokenC, _ := mgr.Invite("tv", "alice", "charlie", aliceAg, alicePub)
+	mgr.Accept("tv", "charlie", tokenC, charlieAg, charliePub)
+
+	// Bob (member) cannot revoke charlie
+	err := mgr.Revoke("tv", "bob", "charlie")
+	if err == nil {
+		t.Error("expected error when member tries to revoke")
+	}
+}
+
+func TestRevokeNonMemberFails(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err := mgr.Revoke("tv", "alice", "bob")
+	if err == nil {
+		t.Error("expected error revoking a non-member")
+	}
+}

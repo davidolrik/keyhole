@@ -23,6 +23,7 @@ In addition to connection, authentication, and command events, the following ope
 | `vault_accept`      | User accepted a vault invitation         |
 | `vault_promote`     | Member promoted to admin                 |
 | `vault_demote`      | Admin demoted to member                  |
+| `vault_revoke`      | User revoked from a vault                |
 | `vault_destroy`     | Vault destroyed                          |
 
 Example:
