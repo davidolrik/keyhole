@@ -273,6 +273,11 @@ func TestParseVaultSyntax(t *testing.T) {
 			argv:    []string{"get", "foo:bar:baz"},
 			wantErr: true,
 		},
+		{
+			name:    "vault ref with colon rejected",
+			argv:    []string{"get", "v:a:u:lt:secret"},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

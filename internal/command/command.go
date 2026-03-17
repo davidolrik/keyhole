@@ -314,7 +314,7 @@ func validateVaultRef(name string) error {
 		return nil
 	}
 	for _, c := range name {
-		if c == '/' || c == '.' || c == '\\' || c == '\x00' {
+		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {
 			return fmt.Errorf("vault name contains invalid character %q", c)
 		}
 	}
