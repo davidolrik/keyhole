@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/hkdf"
@@ -47,11 +48,40 @@ type pendingInvite struct {
 type Manager struct {
 	store        *storage.FileStore
 	serverSecret []byte
+
+	// vaultMu provides per-vault mutual exclusion for read-modify-write
+	// operations on members.json, preventing TOCTOU race conditions.
+	vaultMu   sync.Mutex
+	vaultLocks map[string]*sync.Mutex
 }
 
 // NewManager creates a vault Manager.
 func NewManager(store *storage.FileStore, serverSecret []byte) *Manager {
-	return &Manager{store: store, serverSecret: serverSecret}
+	return &Manager{
+		store:        store,
+		serverSecret: serverSecret,
+		vaultLocks:   make(map[string]*sync.Mutex),
+	}
+}
+
+// lockVault acquires a per-vault mutex, creating one if needed.
+func (m *Manager) lockVault(name string) {
+	m.vaultMu.Lock()
+	mu, ok := m.vaultLocks[name]
+	if !ok {
+		mu = &sync.Mutex{}
+		m.vaultLocks[name] = mu
+	}
+	m.vaultMu.Unlock()
+	mu.Lock()
+}
+
+// unlockVault releases the per-vault mutex.
+func (m *Manager) unlockVault(name string) {
+	m.vaultMu.Lock()
+	mu := m.vaultLocks[name]
+	m.vaultMu.Unlock()
+	mu.Unlock()
 }
 
 // Create creates a new shared vault. The creator becomes the owner.
@@ -225,6 +255,8 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 // Accept completes a vault invite. The user provides the invite token,
 // decrypts the vault key, and re-encrypts it with their own agent-derived key.
 func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) error {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	// Read the pending invite
 	inviteData, err := m.store.ReadPendingInvite(name, username)
 	if err != nil {
@@ -298,6 +330,8 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 
 // Promote promotes a vault member to admin. Only owners and admins can promote.
 func (m *Manager) Promote(name, promoter, targetUser string) error {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	members, err := m.Members(name)
 	if err != nil {
 		return fmt.Errorf("read members: %w", err)
@@ -329,6 +363,8 @@ func (m *Manager) Promote(name, promoter, targetUser string) error {
 
 // Demote demotes a vault admin to member. Only owners and admins can demote.
 func (m *Manager) Demote(name, demoter, targetUser string) error {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	members, err := m.Members(name)
 	if err != nil {
 		return fmt.Errorf("read members: %w", err)
@@ -361,6 +397,8 @@ func (m *Manager) Demote(name, demoter, targetUser string) error {
 // Revoke removes a user from a vault. Only owners and admins can revoke.
 // The owner cannot be revoked. The user's wrapped vault key is also deleted.
 func (m *Manager) Revoke(name, revoker, targetUser string) error {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	members, err := m.Members(name)
 	if err != nil {
 		return fmt.Errorf("read members: %w", err)

@@ -4,9 +4,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -591,6 +593,56 @@ func TestMemberCannotRevoke(t *testing.T) {
 	err := mgr.Revoke("tv", "bob", "charlie")
 	if err == nil {
 		t.Error("expected error when member tries to revoke")
+	}
+}
+
+func TestConcurrentPromoteDemote(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Create 10 members
+	agents := make([]agent.ExtendedAgent, 10)
+	pubs := make([]ssh.PublicKey, 10)
+	for i := 0; i < 10; i++ {
+		agents[i], pubs[i] = newTestAgent(t)
+		name := fmt.Sprintf("user%d", i)
+		token, err := mgr.Invite("tv", "alice", name, aliceAg, alicePub)
+		if err != nil {
+			t.Fatalf("Invite %s: %v", name, err)
+		}
+		if err := mgr.Accept("tv", name, token, agents[i], pubs[i]); err != nil {
+			t.Fatalf("Accept %s: %v", name, err)
+		}
+	}
+
+	// Concurrently promote all 10 members
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			name := fmt.Sprintf("user%d", i)
+			mgr.Promote("tv", "alice", name)
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify all 10 are admin
+	members, err := mgr.Members("tv")
+	if err != nil {
+		t.Fatalf("Members: %v", err)
+	}
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("user%d", i)
+		if members[name] != vault.RoleAdmin {
+			t.Errorf("%s role = %q, want admin", name, members[name])
+		}
 	}
 }
 
