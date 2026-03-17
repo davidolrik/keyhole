@@ -492,7 +492,7 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 	// Use a single error message for both "vault not found" and "not owner"
 	// to avoid leaking vault existence to non-owners.
 	members, err := h.vaultMgr.Members(vaultName)
-	if err != nil || members[username] != "owner" {
+	if err != nil || members[username] != vault.RoleOwner {
 		return fmt.Errorf("only the vault owner can destroy a vault")
 	}
 
