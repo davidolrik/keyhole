@@ -671,6 +671,9 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 
 func (h *Handler) handleInvite(sess ssh.Session, username string) error {
 	if !h.admins[username] {
+		if h.auditLog != nil {
+			h.auditLog.AuthDenied(username, sess.RemoteAddr().String(), "non-admin attempted invite generation")
+		}
 		return fmt.Errorf("permission denied: %q is not an admin", username)
 	}
 
