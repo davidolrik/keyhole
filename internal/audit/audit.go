@@ -26,7 +26,9 @@ func NewLogger(dataDir string) (*Logger, error) {
 	// Rotate if the log has grown too large, keeping up to maxRotatedLogs backups.
 	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
 		for i := maxRotatedLogs - 1; i >= 1; i-- {
-			os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1))
+			if err := os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1)); err != nil && !os.IsNotExist(err) {
+				log.Printf("WARNING: audit log rotation step %d→%d failed: %v", i, i+1, err)
+			}
 		}
 		if err := os.Rename(path, path+".1"); err != nil {
 			log.Printf("WARNING: audit log rotation failed: %v", err)
