@@ -61,6 +61,10 @@ func (e *Encryptor) DecryptAndUpgrade(ag agent.ExtendedAgent, pubKey ssh.PublicK
 	// Try salted derivation first
 	plaintext, err := e.Decrypt(ag, pubKey, serverSecret, username, path, ciphertext)
 	if err == nil {
+		// Perform equivalent work to the legacy fallback path below so that
+		// both paths take similar time, preventing timing side-channels that
+		// reveal which key derivation scheme was used.
+		e.deriveKeyWithSalt(ag, pubKey, serverSecret, username, path, nil)
 		return plaintext, nil
 	}
 

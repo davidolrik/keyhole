@@ -160,6 +160,11 @@ func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey
 
 	vaultKey, err := crypto.DecryptWithKey(wrappingKey, wrappedKey)
 	if err == nil {
+		// Perform equivalent work to the legacy fallback path below so that
+		// both paths take similar time, preventing timing side-channels that
+		// reveal which wrapping key derivation scheme was used.
+		m.deriveWrappingKeyLegacy(username, name, ag, pubKey)
+		crypto.DecryptWithKey(wrappingKey, wrappedKey)
 		crypto.Zeroize(wrappingKey)
 		return vaultKey, nil
 	}
@@ -349,6 +354,15 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		crypto.Zeroize(legacyKey)
 		if err != nil {
 			return fmt.Errorf("decrypt vault key with token: %w", err)
+		}
+	} else {
+		// Perform equivalent work to the legacy fallback path above so that
+		// both paths take similar time, preventing timing side-channels that
+		// reveal which token key derivation scheme was used.
+		dummyKey, _ := deriveTokenKeyWithSalt(tokenRaw, nil, name, username)
+		if dummyKey != nil {
+			crypto.DecryptWithKey(dummyKey, wrappedWithToken)
+			crypto.Zeroize(dummyKey)
 		}
 	}
 	defer crypto.Zeroize(vaultKey)
