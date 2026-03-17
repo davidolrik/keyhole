@@ -252,6 +252,7 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 	if err != nil {
 		return "", fmt.Errorf("decrypt vault key: %w", err)
 	}
+	defer crypto.Zeroize(vaultKey)
 
 	// Generate a random invite token
 	tokenBytes := make([]byte, 32)
