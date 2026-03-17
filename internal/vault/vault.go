@@ -263,6 +263,7 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 	if _, err := io.ReadFull(rand.Reader, tokenBytes); err != nil {
 		return "", fmt.Errorf("generate invite token: %w", err)
 	}
+	defer crypto.Zeroize(tokenBytes)
 	token := fmt.Sprintf("%x", tokenBytes)
 
 	// Derive a wrapping key from the token and encrypt the vault key with it
@@ -331,6 +332,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 	if err != nil {
 		return fmt.Errorf("invalid or expired vault invite")
 	}
+	defer crypto.Zeroize(tokenRaw)
 
 	tokenKey, err := deriveTokenKey(tokenRaw, m.serverSecret, name, username)
 	if err != nil {
