@@ -93,6 +93,9 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 		return err
 	}
 
+	m.lockVault(name)
+	defer m.unlockVault(name)
+
 	// Check vault doesn't already exist
 	if _, err := m.store.ReadVaultMeta(name); err == nil {
 		return fmt.Errorf("vault %q already exists", name)
