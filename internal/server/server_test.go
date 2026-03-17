@@ -1469,6 +1469,75 @@ func TestVaultDestroyPersonalRejected(t *testing.T) {
 	}
 }
 
+func TestWrongKeyCanStillConnect(t *testing.T) {
+	addr, _ := testServerSetup(t)
+
+	// Someone with a different Ed25519 key connecting as "alice" (who is registered).
+	// Should get through SSH auth but be restricted to register only.
+	imposter := newTestUser(t, "alice")
+
+	// Even help should be rejected for unverified sessions
+	_, err := sshRun(t, addr, imposter.cfg, imposter.ag, "help")
+	if err == nil {
+		t.Error("imposter should not be able to run help")
+	}
+
+	// Register should be allowed (though it will fail with bad invite code)
+	out, err := sshRunWithStdin(t, addr, imposter.cfg, nil, "register kh_0000000000000000000000000000000000000000000000000000000000000000", "y\n")
+	if err == nil {
+		t.Fatal("register with bad code should fail")
+	}
+	// Should get through to the register handler (not "not authorized")
+	if strings.Contains(out, "not authorized") {
+		t.Error("register should be allowed for unverified sessions")
+	}
+}
+
+func TestWrongKeyCannotRunCommands(t *testing.T) {
+	addr, _ := testServerSetup(t)
+
+	imposter := newTestUser(t, "alice")
+
+	for _, cmd := range []string{"list", "help", "vault list"} {
+		out, err := sshRun(t, addr, imposter.cfg, imposter.ag, cmd)
+		if err == nil {
+			t.Errorf("imposter should not be able to run %q", cmd)
+		}
+		if !strings.Contains(out, "not authorized") {
+			t.Errorf("cmd %q: expected 'not authorized' error, got: %q", cmd, out)
+		}
+	}
+}
+
+func TestUnregisteredAndWrongKeyGetSameError(t *testing.T) {
+	addr, _ := testServerSetup(t)
+
+	imposter := newTestUser(t, "alice")
+	stranger := newTestUser(t, "nobody")
+
+	outImposter, _ := sshRun(t, addr, imposter.cfg, imposter.ag, "list")
+	outStranger, _ := sshRun(t, addr, stranger.cfg, stranger.ag, "list")
+
+	if outImposter != outStranger {
+		t.Errorf("different error messages leak username existence:\n  wrong key: %q\n  unregistered: %q", outImposter, outStranger)
+	}
+}
+
+func TestRegisterWithBadCodeDoesNotLeakUsername(t *testing.T) {
+	addr, _ := testServerSetup(t)
+
+	// Try registering as "alice" (who exists) with a bad invite code
+	imposter := newTestUser(t, "alice")
+	out, err := sshRunWithStdin(t, addr, imposter.cfg, nil, "register kh_0000000000000000000000000000000000000000000000000000000000000000", "y\n")
+	if err == nil {
+		t.Fatal("register with bad code should fail")
+	}
+	// Should say "invalid invite code", NOT "username already exists"
+	if strings.Contains(out, "already exists") {
+		t.Error("error message leaks that username exists")
+	}
+}
+
 func TestHelpIncludesVaultCommands(t *testing.T) {
 	addr, alice := testServerSetup(t)
 

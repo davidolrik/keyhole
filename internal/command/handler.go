@@ -643,13 +643,10 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		return err
 	}
 
-	// Check user doesn't already exist
-	authKeysPath := filepath.Join(h.dataDir, username, ".ssh", "authorized_keys")
-	if _, err := os.Stat(authKeysPath); err == nil {
-		return fmt.Errorf("username %q already exists", username)
-	}
-
-	// Validate invite code exists and has not expired
+	// Validate invite code exists and has not expired.
+	// This check is intentionally before the username-exists check to
+	// prevent username enumeration: without a valid invite code, the
+	// caller learns nothing about whether the username is taken.
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
 	inviteData, err := os.ReadFile(invitePath)
 	if err != nil {
@@ -661,6 +658,12 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 			os.Remove(invitePath)
 			return fmt.Errorf("invalid or expired invite code")
 		}
+	}
+
+	// Check user doesn't already exist
+	authKeysPath := filepath.Join(h.dataDir, username, ".ssh", "authorized_keys")
+	if _, err := os.Stat(authKeysPath); err == nil {
+		return fmt.Errorf("username %q already exists", username)
 	}
 
 	// Show the connecting key and ask for confirmation

@@ -24,6 +24,11 @@ import (
 
 const serverSecretLength = 64
 
+// contextKey is a type for SSH context keys to avoid collisions.
+type contextKey string
+
+const keyVerifiedKey contextKey = "keyVerified"
+
 const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // Config holds the runtime configuration for the server.
@@ -120,9 +125,9 @@ func (s *Server) ListenAndServe() error {
 }
 
 // publicKeyHandler authenticates a connecting client.
-// Only Ed25519 keys are accepted. For existing users, the key is checked against
-// their authorized_keys. For new users (no authorized_keys), any Ed25519 key is
-// allowed through — the command handler will require a valid invite code.
+// Only Ed25519 keys are accepted. All Ed25519 keys are allowed through to
+// prevent username enumeration — the session handler restricts unverified
+// sessions to register and help only.
 func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	username := ctx.User()
 	remote := ctx.RemoteAddr().String()
@@ -134,21 +139,17 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		return false
 	}
 
+	// Check authorized_keys if they exist. Mark the key as verified only
+	// when it matches. Unregistered users and wrong-key users both get
+	// through auth identically — the session handler enforces access.
 	authKeysPath := filepath.Join(s.cfg.DataDir, username, ".ssh", "authorized_keys")
 	data, err := os.ReadFile(authKeysPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// No authorized_keys — allow through; session handler will require register
-			s.auditLog.Connect(username, remote, gossh.FingerprintSHA256(key))
-			return true
-		}
+	if err == nil && checkAuthorizedKeys(data, key) {
+		ctx.SetValue(keyVerifiedKey, true)
+	}
+	if err != nil && !os.IsNotExist(err) {
 		log.Printf("auth: error reading authorized_keys for %q: %v", username, err)
 		s.auditLog.AuthDenied(username, remote, "error reading authorized_keys")
-		return false
-	}
-
-	if !checkAuthorizedKeys(data, key) {
-		s.auditLog.AuthDenied(username, remote, "key not in authorized_keys")
 		return false
 	}
 
@@ -194,11 +195,12 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 		return
 	}
 
-	// Users without authorized_keys may only register or ask for help
-	authKeysPath := filepath.Join(s.cfg.DataDir, username, ".ssh", "authorized_keys")
-	if _, statErr := os.Stat(authKeysPath); os.IsNotExist(statErr) {
-		if cmd.Op != command.OpRegister && cmd.Op != command.OpHelp {
-			regErr := fmt.Errorf("user %q not registered; use 'register <invite_code>'", username)
+	// Unverified sessions (wrong key or unregistered) may only register.
+	// The same error is returned in both cases to prevent username enumeration.
+	verified, _ := sess.Context().Value(keyVerifiedKey).(bool)
+	if !verified {
+		if cmd.Op != command.OpRegister {
+			regErr := fmt.Errorf("not authorized")
 			s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, regErr)
 			errorf("%v", regErr)
 			sess.Exit(1)
