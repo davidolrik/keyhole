@@ -275,7 +275,7 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 	cmd, err := command.Parse(argv)
 	if err != nil {
 		s.auditLog.Command(username, remote, "unknown", "", err)
-		errorf("%v", err)
+		errorf("%s", sanitizeError(err))
 		sess.Exit(1)
 		return
 	}
@@ -297,7 +297,7 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 	sshPubKey, err := gossh.ParsePublicKey(pubKey.Marshal())
 	if err != nil {
 		s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, err)
-		errorf("parse public key: %v", err)
+		errorf("%s", sanitizeError(err))
 		sess.Exit(1)
 		return
 	}
