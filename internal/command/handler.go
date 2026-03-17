@@ -989,6 +989,8 @@ func promptSecret(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 // readLine reads one line from the session, stopping at newline or EOF.
 // A timeout limits how long the entire read can take, preventing slow
 // trickle attacks from holding goroutines indefinitely.
+// On timeout, the session's stdin is closed to unblock the reading goroutine
+// and prevent goroutine accumulation under sustained slow-trickle attacks.
 func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 	type result struct {
 		data []byte
@@ -1025,6 +1027,7 @@ func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 	case r := <-ch:
 		return r.data, r.err
 	case <-time.After(timeout):
+		sess.Close()
 		return nil, fmt.Errorf("read timeout")
 	}
 }
