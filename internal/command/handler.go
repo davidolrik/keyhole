@@ -124,7 +124,9 @@ func (h *Handler) handleGet(sess ssh.Session, username string, pubKey gossh.Publ
 		return fmt.Errorf("read secret: %w", err)
 	}
 
-	plaintext, err := h.enc.Decrypt(ag, pubKey, h.serverSecret, username, path, ciphertext)
+	plaintext, err := h.enc.DecryptAndUpgrade(ag, pubKey, h.serverSecret, username, path, ciphertext, func(upgraded []byte) error {
+		return h.store.Write(username, path, upgraded)
+	})
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
@@ -247,12 +249,9 @@ func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("read secret: %w", err)
 	}
 
-	secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, path)
-	if err != nil {
-		return fmt.Errorf("derive secret key: %w", err)
-	}
-
-	plaintext, err := crypto.DecryptWithKey(secretKey, ciphertext)
+	plaintext, err := decryptVaultSecret(vaultKey, path, h.serverSecret, ciphertext, func(upgraded []byte) error {
+		return h.fileStore.WriteVaultSecret(vaultName, path, upgraded)
+	})
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
@@ -291,7 +290,7 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("vault key: %w", err)
 	}
 
-	secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, path)
+	secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, path, h.serverSecret)
 	if err != nil {
 		return fmt.Errorf("derive secret key: %w", err)
 	}
@@ -531,11 +530,9 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		if err != nil {
 			return fmt.Errorf("read source: %w", err)
 		}
-		secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, cmd.Path)
-		if err != nil {
-			return fmt.Errorf("derive source key: %w", err)
-		}
-		plaintext, err = crypto.DecryptWithKey(secretKey, ciphertext)
+		plaintext, err = decryptVaultSecret(vaultKey, cmd.Path, h.serverSecret, ciphertext, func(upgraded []byte) error {
+			return h.fileStore.WriteVaultSecret(cmd.Vault, cmd.Path, upgraded)
+		})
 		if err != nil {
 			return fmt.Errorf("decrypt source: %w", err)
 		}
@@ -545,7 +542,9 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		if err != nil {
 			return fmt.Errorf("read source: %w", err)
 		}
-		plaintext, err = h.enc.Decrypt(ag, pubKey, h.serverSecret, username, cmd.Path, ciphertext)
+		plaintext, err = h.enc.DecryptAndUpgrade(ag, pubKey, h.serverSecret, username, cmd.Path, ciphertext, func(upgraded []byte) error {
+			return h.store.Write(username, cmd.Path, upgraded)
+		})
 		if err != nil {
 			return fmt.Errorf("decrypt source: %w", err)
 		}
@@ -591,7 +590,7 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		if err != nil {
 			return fmt.Errorf("destination vault key: %w", err)
 		}
-		secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, cmd.TargetPath)
+		secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, cmd.TargetPath, h.serverSecret)
 		if err != nil {
 			return fmt.Errorf("derive destination key: %w", err)
 		}
@@ -829,6 +828,41 @@ func visibleLen(s string) int {
 		}
 	}
 	return n
+}
+
+// decryptVaultSecret decrypts a vault secret, falling back to legacy (nil-salt)
+// key derivation if the salted key fails. On legacy fallback, re-encrypts with
+// the salted key and calls writeback to persist the upgrade.
+func decryptVaultSecret(vaultKey []byte, path string, serverSecret, ciphertext []byte, writeback func([]byte) error) ([]byte, error) {
+	// Try salted derivation first
+	secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, path, serverSecret)
+	if err != nil {
+		return nil, err
+	}
+	plaintext, err := crypto.DecryptWithKey(secretKey, ciphertext)
+	if err == nil {
+		return plaintext, nil
+	}
+
+	// Fall back to legacy (nil-salt) derivation
+	legacyKey, keyErr := crypto.DeriveVaultSecretKeyLegacy(vaultKey, path)
+	if keyErr != nil {
+		return nil, err
+	}
+	plaintext, legacyErr := crypto.DecryptWithKey(legacyKey, ciphertext)
+	if legacyErr != nil {
+		return nil, err
+	}
+
+	// Re-encrypt with salted key and write back
+	if writeback != nil {
+		newCiphertext, encErr := crypto.EncryptWithKey(secretKey, plaintext)
+		if encErr == nil {
+			writeback(newCiphertext)
+		}
+	}
+
+	return plaintext, nil
 }
 
 // requireAgent returns the forwarded SSH agent from the session, or an error if not available.

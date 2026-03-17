@@ -13,10 +13,21 @@ import (
 
 const vaultHKDFInfo = "keyhole-vault-v1"
 
-// DeriveVaultSecretKey derives an AES-256 key from a vault key and path using HKDF-SHA256.
-func DeriveVaultSecretKey(vaultKey []byte, path string) ([]byte, error) {
+// DeriveVaultSecretKey derives an AES-256 key from a vault key and path using
+// HKDF-SHA256, with serverSecret as the HKDF salt.
+func DeriveVaultSecretKey(vaultKey []byte, path string, serverSecret []byte) ([]byte, error) {
+	return deriveVaultSecretKey(vaultKey, path, serverSecret)
+}
+
+// DeriveVaultSecretKeyLegacy derives an AES-256 key using nil HKDF salt.
+// Used for fallback decryption of data encrypted before salt was added.
+func DeriveVaultSecretKeyLegacy(vaultKey []byte, path string) ([]byte, error) {
+	return deriveVaultSecretKey(vaultKey, path, nil)
+}
+
+func deriveVaultSecretKey(vaultKey []byte, path string, salt []byte) ([]byte, error) {
 	info := []byte(vaultHKDFInfo + ":" + path)
-	reader := hkdf.New(sha256.New, vaultKey, nil, info)
+	reader := hkdf.New(sha256.New, vaultKey, salt, info)
 	key := make([]byte, keySize)
 	if _, err := io.ReadFull(reader, key); err != nil {
 		return nil, fmt.Errorf("hkdf: %w", err)

@@ -141,6 +141,8 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 }
 
 // VaultKey decrypts and returns the vault key for the given user.
+// Falls back to legacy (nil-salt) wrapping key derivation if the salted key
+// fails, and re-wraps with the salted key on successful fallback.
 func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) ([]byte, error) {
 	wrappedKey, err := m.store.ReadVaultKey(name, username)
 	if err != nil {
@@ -153,8 +155,24 @@ func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey
 	}
 
 	vaultKey, err := crypto.DecryptWithKey(wrappingKey, wrappedKey)
-	if err != nil {
+	if err == nil {
+		return vaultKey, nil
+	}
+
+	// Fall back to legacy (nil-salt) wrapping key
+	legacyKey, keyErr := m.deriveWrappingKeyLegacy(username, name, ag, pubKey)
+	if keyErr != nil {
 		return nil, fmt.Errorf("unwrap vault key: %w", err)
+	}
+	vaultKey, legacyErr := crypto.DecryptWithKey(legacyKey, wrappedKey)
+	if legacyErr != nil {
+		return nil, fmt.Errorf("unwrap vault key: %w", err)
+	}
+
+	// Re-wrap with salted wrapping key
+	newWrapped, encErr := crypto.EncryptWithKey(wrappingKey, vaultKey)
+	if encErr == nil {
+		m.store.WriteVaultKey(name, username, newWrapped)
 	}
 
 	return vaultKey, nil
@@ -229,7 +247,7 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 	token := fmt.Sprintf("%x", tokenBytes)
 
 	// Derive a wrapping key from the token and encrypt the vault key with it
-	tokenKey, err := deriveTokenKey(tokenBytes, name, targetUser)
+	tokenKey, err := deriveTokenKey(tokenBytes, m.serverSecret, name, targetUser)
 	if err != nil {
 		return "", fmt.Errorf("derive token key: %w", err)
 	}
@@ -287,13 +305,21 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		return fmt.Errorf("invalid invite token: %w", err)
 	}
 
-	tokenKey, err := deriveTokenKey(tokenRaw, name, username)
+	tokenKey, err := deriveTokenKey(tokenRaw, m.serverSecret, name, username)
 	if err != nil {
 		return fmt.Errorf("derive token key: %w", err)
 	}
 	vaultKey, err := crypto.DecryptWithKey(tokenKey, wrappedWithToken)
 	if err != nil {
-		return fmt.Errorf("decrypt vault key with token: %w", err)
+		// Fall back to legacy (nil-salt) token key derivation
+		legacyKey, keyErr := deriveTokenKeyWithSalt(tokenRaw, nil, name, username)
+		if keyErr != nil {
+			return fmt.Errorf("decrypt vault key with token: %w", err)
+		}
+		vaultKey, err = crypto.DecryptWithKey(legacyKey, wrappedWithToken)
+		if err != nil {
+			return fmt.Errorf("decrypt vault key with token: %w", err)
+		}
 	}
 
 	// Wrap the vault key with the user's own agent-derived key
@@ -457,10 +483,15 @@ func (m *Manager) Destroy(name, username string) error {
 	return m.store.DeleteVault(name)
 }
 
-// deriveTokenKey derives an AES-256 key from an invite token using HKDF-SHA256.
-func deriveTokenKey(tokenBytes []byte, vaultName, username string) ([]byte, error) {
+// deriveTokenKey derives an AES-256 key from an invite token using HKDF-SHA256,
+// with serverSecret as the HKDF salt.
+func deriveTokenKey(tokenBytes, serverSecret []byte, vaultName, username string) ([]byte, error) {
+	return deriveTokenKeyWithSalt(tokenBytes, serverSecret, vaultName, username)
+}
+
+func deriveTokenKeyWithSalt(tokenBytes, salt []byte, vaultName, username string) ([]byte, error) {
 	info := "keyhole-vault-invite-v1:" + vaultName + ":" + username
-	reader := hkdf.New(sha256.New, tokenBytes, nil, []byte(info))
+	reader := hkdf.New(sha256.New, tokenBytes, salt, []byte(info))
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(reader, key); err != nil {
 		return nil, fmt.Errorf("hkdf derive token key: %w", err)
@@ -507,9 +538,18 @@ func (m *Manager) wrapVaultKey(vaultKey []byte, username, vaultName string, ag a
 	return crypto.EncryptWithKey(wrappingKey, vaultKey)
 }
 
-// deriveWrappingKey derives the AES-256 wrapping key for a user's vault key copy.
-// challenge = SHA256(serverSecret:keyhole-v1:username:__vault_key__/vaultname)
+// deriveWrappingKey derives the AES-256 wrapping key for a user's vault key copy,
+// using serverSecret as the HKDF salt.
 func (m *Manager) deriveWrappingKey(username, vaultName string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) ([]byte, error) {
+	return m.deriveWrappingKeyWithSalt(username, vaultName, ag, pubKey, m.serverSecret)
+}
+
+// deriveWrappingKeyLegacy derives the wrapping key with nil HKDF salt (legacy).
+func (m *Manager) deriveWrappingKeyLegacy(username, vaultName string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) ([]byte, error) {
+	return m.deriveWrappingKeyWithSalt(username, vaultName, ag, pubKey, nil)
+}
+
+func (m *Manager) deriveWrappingKeyWithSalt(username, vaultName string, ag agent.ExtendedAgent, pubKey ssh.PublicKey, salt []byte) ([]byte, error) {
 	path := "__vault_key__/" + vaultName
 	challenge := buildChallenge(m.serverSecret, username, path)
 
@@ -518,7 +558,7 @@ func (m *Manager) deriveWrappingKey(username, vaultName string, ag agent.Extende
 		return nil, fmt.Errorf("agent sign: %w", err)
 	}
 
-	reader := hkdf.New(sha256.New, sig.Blob, nil, []byte(wrappingHKDFInfo))
+	reader := hkdf.New(sha256.New, sig.Blob, salt, []byte(wrappingHKDFInfo))
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(reader, key); err != nil {
 		return nil, fmt.Errorf("hkdf: %w", err)

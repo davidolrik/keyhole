@@ -136,6 +136,79 @@ func TestDifferentUsersProduceDifferentCiphertext(t *testing.T) {
 	}
 }
 
+func TestDecryptAndUpgradeLegacyData(t *testing.T) {
+	ag, pubKey := newTestAgent(t)
+	serverSecret := []byte("test-server-secret")
+	plaintext := []byte("my legacy secret")
+	enc := crypto.NewEncryptor()
+
+	// Create legacy ciphertext (nil salt)
+	legacyCiphertext, err := enc.EncryptLegacy(ag, pubKey, serverSecret, "alice", "account/old", plaintext)
+	if err != nil {
+		t.Fatalf("EncryptLegacy: %v", err)
+	}
+
+	// Standard Decrypt (salted) should fail on legacy ciphertext
+	_, err = enc.Decrypt(ag, pubKey, serverSecret, "alice", "account/old", legacyCiphertext)
+	if err == nil {
+		t.Fatal("expected error decrypting legacy ciphertext with salted Decrypt")
+	}
+
+	// DecryptAndUpgrade should succeed via fallback
+	var upgraded []byte
+	got, err := enc.DecryptAndUpgrade(ag, pubKey, serverSecret, "alice", "account/old", legacyCiphertext, func(newCiphertext []byte) error {
+		upgraded = newCiphertext
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("DecryptAndUpgrade: %v", err)
+	}
+	if !bytes.Equal(got, plaintext) {
+		t.Errorf("plaintext = %q, want %q", got, plaintext)
+	}
+	if upgraded == nil {
+		t.Error("writeback should have been called for legacy data")
+	}
+
+	// The upgraded ciphertext should be decryptable with standard (salted) Decrypt
+	got2, err := enc.Decrypt(ag, pubKey, serverSecret, "alice", "account/old", upgraded)
+	if err != nil {
+		t.Fatalf("Decrypt upgraded ciphertext: %v", err)
+	}
+	if !bytes.Equal(got2, plaintext) {
+		t.Errorf("upgraded plaintext = %q, want %q", got2, plaintext)
+	}
+}
+
+func TestDecryptAndUpgradeAlreadySalted(t *testing.T) {
+	ag, pubKey := newTestAgent(t)
+	serverSecret := []byte("test-server-secret")
+	plaintext := []byte("my salted secret")
+	enc := crypto.NewEncryptor()
+
+	// Create salted ciphertext
+	ciphertext, err := enc.Encrypt(ag, pubKey, serverSecret, "alice", "account/new", plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	// DecryptAndUpgrade should NOT call writeback for already-salted data
+	writebackCalled := false
+	got, err := enc.DecryptAndUpgrade(ag, pubKey, serverSecret, "alice", "account/new", ciphertext, func(newCiphertext []byte) error {
+		writebackCalled = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("DecryptAndUpgrade: %v", err)
+	}
+	if !bytes.Equal(got, plaintext) {
+		t.Errorf("plaintext = %q, want %q", got, plaintext)
+	}
+	if writebackCalled {
+		t.Error("writeback should NOT have been called for already-salted data")
+	}
+}
+
 func TestDecryptTruncatedData(t *testing.T) {
 	ag, pubKey := newTestAgent(t)
 	serverSecret := []byte("server-secret")

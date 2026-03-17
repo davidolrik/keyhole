@@ -13,12 +13,32 @@ func TestDeriveVaultSecretKey(t *testing.T) {
 		vaultKey[i] = byte(i % 256)
 	}
 
-	key, err := crypto.DeriveVaultSecretKey(vaultKey, "foo/bar")
+	key, err := crypto.DeriveVaultSecretKey(vaultKey, "foo/bar", []byte("server-secret"))
 	if err != nil {
 		t.Fatalf("DeriveVaultSecretKey: %v", err)
 	}
 	if len(key) != 32 {
 		t.Errorf("key length = %d, want 32", len(key))
+	}
+}
+
+func TestDeriveVaultSecretKeySaltProducesDifferentKeys(t *testing.T) {
+	vaultKey := make([]byte, 512)
+	for i := range vaultKey {
+		vaultKey[i] = byte(i % 256)
+	}
+
+	salted, err := crypto.DeriveVaultSecretKey(vaultKey, "foo/bar", []byte("server-secret"))
+	if err != nil {
+		t.Fatalf("DeriveVaultSecretKey salted: %v", err)
+	}
+	legacy, err := crypto.DeriveVaultSecretKeyLegacy(vaultKey, "foo/bar")
+	if err != nil {
+		t.Fatalf("DeriveVaultSecretKeyLegacy: %v", err)
+	}
+
+	if bytes.Equal(salted, legacy) {
+		t.Error("salted and legacy keys should differ")
 	}
 }
 
@@ -28,11 +48,11 @@ func TestDeriveVaultSecretKeyDifferentPaths(t *testing.T) {
 		vaultKey[i] = byte(i % 256)
 	}
 
-	key1, err := crypto.DeriveVaultSecretKey(vaultKey, "path/one")
+	key1, err := crypto.DeriveVaultSecretKey(vaultKey, "path/one", []byte("server-secret"))
 	if err != nil {
 		t.Fatalf("DeriveVaultSecretKey path/one: %v", err)
 	}
-	key2, err := crypto.DeriveVaultSecretKey(vaultKey, "path/two")
+	key2, err := crypto.DeriveVaultSecretKey(vaultKey, "path/two", []byte("server-secret"))
 	if err != nil {
 		t.Fatalf("DeriveVaultSecretKey path/two: %v", err)
 	}
@@ -86,8 +106,8 @@ func TestCrossPathDecryptFails(t *testing.T) {
 		vaultKey[i] = byte(i % 256)
 	}
 
-	key1, _ := crypto.DeriveVaultSecretKey(vaultKey, "path/one")
-	key2, _ := crypto.DeriveVaultSecretKey(vaultKey, "path/two")
+	key1, _ := crypto.DeriveVaultSecretKey(vaultKey, "path/one", []byte("server-secret"))
+	key2, _ := crypto.DeriveVaultSecretKey(vaultKey, "path/two", []byte("server-secret"))
 
 	ciphertext, err := crypto.EncryptWithKey(key1, []byte("secret"))
 	if err != nil {
