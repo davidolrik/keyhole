@@ -646,6 +646,42 @@ func TestConcurrentPromoteDemote(t *testing.T) {
 	}
 }
 
+func TestAcceptCleansUpKeyOnMembersWriteFailure(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+
+	// Make members.json read-only so the write fails after vault key is written
+	membersPath := filepath.Join(dir, "vaults", "tv", "members.json")
+	if err := os.Chmod(membersPath, 0400); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	defer os.Chmod(membersPath, 0600) // restore for cleanup
+
+	// Accept should fail because members.json can't be written
+	err = mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	if err == nil {
+		t.Fatal("expected error when members.json is read-only")
+	}
+
+	// The vault key for bob should have been cleaned up
+	keyPath := filepath.Join(dir, "vaults", "tv", "keys", "bob.enc")
+	if _, err := os.Stat(keyPath); err == nil {
+		t.Error("orphaned vault key should have been cleaned up after members write failure")
+	}
+}
+
 func TestRevokeNonMemberFails(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)

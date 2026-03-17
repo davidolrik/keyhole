@@ -301,7 +301,8 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		return fmt.Errorf("wrap vault key: %w", err)
 	}
 
-	// Write the user's vault key
+	// Write the user's vault key first, then update members.json.
+	// If members write fails, clean up the vault key to avoid orphaned state.
 	if err := m.store.WriteVaultKey(name, username, wrappedKey); err != nil {
 		return fmt.Errorf("write vault key: %w", err)
 	}
@@ -309,14 +310,17 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 	// Add user to members
 	members, err := m.Members(name)
 	if err != nil {
+		m.store.DeleteVaultKey(name, username)
 		return fmt.Errorf("read members: %w", err)
 	}
 	members[username] = RoleMember
 	membersJSON, err := json.Marshal(members)
 	if err != nil {
+		m.store.DeleteVaultKey(name, username)
 		return fmt.Errorf("marshal members: %w", err)
 	}
 	if err := m.store.WriteVaultMembers(name, membersJSON); err != nil {
+		m.store.DeleteVaultKey(name, username)
 		return fmt.Errorf("write members: %w", err)
 	}
 
