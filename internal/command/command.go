@@ -422,10 +422,15 @@ func sanitizePath(p string) (string, error) {
 	return cleaned, nil
 }
 
+const maxInviteCodeLength = 256
+
 // validateInviteCode rejects invite codes containing path-unsafe or
 // control characters. Control characters (< 0x20) are rejected to
 // prevent log injection and filesystem edge cases.
 func validateInviteCode(code string) error {
+	if len(code) > maxInviteCodeLength {
+		return fmt.Errorf("invite code exceeds maximum length of %d characters", maxInviteCodeLength)
+	}
 	for _, c := range code {
 		if c == '/' || c == '\\' || c == '.' || c < ' ' {
 			return fmt.Errorf("invite code contains invalid character")
