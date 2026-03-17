@@ -45,10 +45,7 @@ func (s *FileStore) Write(username, secretPath string, ciphertext []byte) error 
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if isSymlink(fpath) {
-		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
-	}
-	return os.WriteFile(fpath, ciphertext, 0600)
+	return writeFileNoFollow(fpath, ciphertext, 0600)
 }
 
 // Read returns the raw ciphertext for the given username and path.
@@ -60,23 +57,13 @@ func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 // Delete removes a secret for the given username and path.
 func (s *FileStore) Delete(username, secretPath string) error {
 	fpath := s.filePath(username, secretPath)
-	if isSymlink(fpath) {
-		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	if err := removeNoFollow(fpath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
 	}
-	err := os.Remove(fpath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		return ErrNotFound
-	}
-	return err
-}
-
-// isSymlink reports whether path is a symbolic link.
-func isSymlink(path string) bool {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeSymlink != 0
+	return nil
 }
 
 // List returns all secret paths for username that start with prefix.
@@ -126,6 +113,39 @@ func (s *FileStore) secretRoot(username string) string {
 // filePath returns the full filesystem path for a user's secret.
 func (s *FileStore) filePath(username, secretPath string) string {
 	return filepath.Join(s.secretRoot(username), filepath.FromSlash(secretPath)+".enc")
+}
+
+// writeFileNoFollow creates or truncates a file with O_NOFOLLOW to atomically
+// prevent symlink traversal, eliminating the TOCTOU race between a symlink
+// check and the subsequent write.
+func writeFileNoFollow(path string, data []byte, perm os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, perm)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return fmt.Errorf("symlink detected at %q", filepath.Base(path))
+		}
+		return err
+	}
+	_, writeErr := f.Write(data)
+	if closeErr := f.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	return writeErr
+}
+
+// removeNoFollow verifies a path is not a symlink using Lstat, then removes it.
+// Unlike reads and writes, os.Remove on a symlink removes the link itself (not
+// the target), so there is no traversal risk. The check prevents accidental
+// deletion of symlinks that should not exist in the data directory.
+func removeNoFollow(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(path))
+	}
+	return os.Remove(path)
 }
 
 // readFileNoFollow opens a file with O_NOFOLLOW to atomically prevent symlink
