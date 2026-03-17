@@ -723,10 +723,11 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		}
 	}
 
-	// Check user doesn't already exist
+	// Check user doesn't already exist. Return the same generic error as
+	// the invite code check above to avoid leaking username existence.
 	authKeysPath := filepath.Join(h.dataDir, username, ".ssh", "authorized_keys")
 	if _, err := os.Stat(authKeysPath); err == nil {
-		return fmt.Errorf("username %q already exists", username)
+		return fmt.Errorf("invalid or expired invite code")
 	}
 
 	// Show the connecting key and ask for confirmation
