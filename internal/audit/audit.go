@@ -83,7 +83,7 @@ func (lg *Logger) VaultOp(op, actor, remote, vaultName string, attrs ...any) {
 		"vault", vaultName,
 	}
 	args = append(args, attrs...)
-	lg.l.Info("vault_"+op, args...)
+	lg.l.Info("vault_"+sanitizeLogValue(op), args...)
 }
 
 // VaultOpDenied logs a failed vault operation (permission denied, etc.).
@@ -92,10 +92,10 @@ func (lg *Logger) VaultOpDenied(op, actor, remote, vaultName, reason string, att
 		"actor", actor,
 		"remote", remote,
 		"vault", vaultName,
-		"reason", reason,
+		"reason", sanitizeLogValue(reason),
 	}
 	args = append(args, attrs...)
-	lg.l.Warn("vault_"+op+"_denied", args...)
+	lg.l.Warn("vault_"+sanitizeLogValue(op)+"_denied", args...)
 }
 
 // Command logs the result of an executed command.
@@ -115,7 +115,24 @@ func (lg *Logger) Command(username, remote, op, path string, err error) {
 			"op", op,
 			"path", path,
 			"result", "error",
-			"err", err.Error(),
+			"err", sanitizeLogValue(err.Error()),
 		)
 	}
+}
+
+// sanitizeLogValue strips control characters (newlines, tabs, etc.) from a
+// string before it is written to the audit log, preventing log injection.
+func sanitizeLogValue(s string) string {
+	clean := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\n' || c == '\r' || c == '\t' {
+			clean = append(clean, ' ')
+		} else if c < 0x20 {
+			continue
+		} else {
+			clean = append(clean, c)
+		}
+	}
+	return string(clean)
 }
