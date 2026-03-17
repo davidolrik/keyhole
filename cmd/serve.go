@@ -39,14 +39,19 @@ serveCmd.Flags().StringVarP(&flagConfigPath, "config", "C", "", "Path to HCL con
 func runServe(cmd *cobra.Command, args []string) error {
 	defaults := config.Default()
 
+	// Load environment variables once — LoadEnv clears sensitive env vars
+	// (e.g. KEYHOLE_SERVER_SECRET) after reading them, so it must not be
+	// called more than once.
+	envCfg := config.LoadEnv()
+
 	// Resolve config file path: explicit flag, or derive from data_dir
 	configPath := flagConfigPath
 	if configPath == "" {
 		// We need data_dir to find the config file, so do a preliminary
 		// resolve: CLI > env > default
 		dataDir := defaults.DataDir
-		if envDir := config.LoadEnv().DataDir; envDir != "" {
-			dataDir = envDir
+		if envCfg.DataDir != "" {
+			dataDir = envCfg.DataDir
 		}
 		if flagDataDir != "" {
 			dataDir = flagDataDir
@@ -61,9 +66,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	} else if loaded != nil {
 		fileCfg = *loaded
 	}
-
-	// Load environment variables
-	envCfg := config.LoadEnv()
 
 	// Build CLI config from flags
 	cliCfg := config.Config{
