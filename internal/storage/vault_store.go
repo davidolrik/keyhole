@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const maxMetadataSize = 1024 * 1024 // 1MB limit for metadata files
+
 // Vault storage layout:
 //   {dataDir}/vaults/{vaultname}/meta.json
 //   {dataDir}/vaults/{vaultname}/members.json
@@ -111,14 +113,7 @@ func (s *FileStore) ReadVaultMeta(vault string) ([]byte, error) {
 	if isSymlink(fpath) {
 		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
 	}
-	data, err := os.ReadFile(fpath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return data, nil
+	return readFileLimited(fpath, maxMetadataSize)
 }
 
 // WriteVaultMembers writes the vault members file (members.json).
@@ -139,14 +134,7 @@ func (s *FileStore) ReadVaultMembers(vault string) ([]byte, error) {
 	if isSymlink(fpath) {
 		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
 	}
-	data, err := os.ReadFile(fpath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return data, nil
+	return readFileLimited(fpath, maxMetadataSize)
 }
 
 // WriteVaultKey writes a user's wrapped vault key.
@@ -277,4 +265,23 @@ func (s *FileStore) vaultKeyPath(vault, username string) string {
 
 func (s *FileStore) pendingInvitePath(vault, username string) string {
 	return filepath.Join(s.vaultDir(vault), "pending", username+".invite")
+}
+
+// readFileLimited reads a file, returning an error if it exceeds maxSize bytes.
+func readFileLimited(path string, maxSize int64) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if info.Size() > maxSize {
+		return nil, fmt.Errorf("file %q exceeds size limit (%d bytes)", filepath.Base(path), maxSize)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
