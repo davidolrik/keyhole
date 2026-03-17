@@ -30,7 +30,9 @@ func NewLogger(dataDir string) (*Logger, error) {
 			if err := os.Rename(fmt.Sprintf("%s.%d", path, i), dst); err != nil && !os.IsNotExist(err) {
 				log.Printf("WARNING: audit log rotation step %d→%d failed: %v", i, i+1, err)
 			} else if err == nil {
-				os.Chmod(dst, 0600)
+				if chmodErr := os.Chmod(dst, 0600); chmodErr != nil {
+					log.Printf("WARNING: audit log chmod %s failed: %v", dst, chmodErr)
+				}
 			}
 		}
 		rotated := path + ".1"
@@ -38,12 +40,20 @@ func NewLogger(dataDir string) (*Logger, error) {
 			log.Printf("WARNING: audit log rotation failed: %v", err)
 			return nil, fmt.Errorf("audit log rotation failed: %w", err)
 		}
-		os.Chmod(rotated, 0600)
+		if err := os.Chmod(rotated, 0600); err != nil {
+			log.Printf("WARNING: audit log chmod %s failed: %v", rotated, err)
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log: %w", err)
+	}
+	// Enforce permissions on existing files that may have been created with
+	// different permissions by a previous version or umask.
+	if err := f.Chmod(0600); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("chmod audit log: %w", err)
 	}
 	l := slog.New(slog.NewJSONHandler(f, nil))
 	return &Logger{l: l, f: f}, nil
