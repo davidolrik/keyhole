@@ -3,7 +3,12 @@ package vault_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -355,5 +360,50 @@ func TestInviteTokenDomainSeparation(t *testing.T) {
 	// Bob's token should work for vault-a
 	if err := mgr.Accept("vault-a", "bob", tokenA, bobAg, bobPub); err != nil {
 		t.Fatalf("Accept vault-a with correct token: %v", err)
+	}
+}
+
+func TestExpiredVaultInvite(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+
+	// Tamper with the pending invite's timestamp to make it expired
+	invitePath := filepath.Join(dir, "vaults", "tv", "pending", "bob.invite")
+	data, err := os.ReadFile(invitePath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var invite struct {
+		WrappedKey json.RawMessage `json:"wrapped_key"`
+		Created    string          `json:"created"`
+	}
+	if err := json.Unmarshal(data, &invite); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	// Set creation time to 4 days ago (beyond 72h TTL)
+	invite.Created = time.Now().Add(-96 * time.Hour).UTC().Format(time.RFC3339)
+	tampered, _ := json.Marshal(invite)
+	if err := os.WriteFile(invitePath, tampered, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	err = mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	if err == nil {
+		t.Error("expected error accepting expired vault invite")
+	}
+	if !strings.Contains(err.Error(), "expired") {
+		t.Errorf("error = %q, expected to mention 'expired'", err)
 	}
 }

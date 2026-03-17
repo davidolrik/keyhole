@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	vaultKeySize   = 512 // 4096 bits
-	challengeVer   = "keyhole-v1"
+	vaultKeySize     = 512 // 4096 bits
+	challengeVer     = "keyhole-v1"
 	wrappingHKDFInfo = "keyhole-vault-wrapping-v1"
+	vaultInviteTTL   = 72 * time.Hour
 )
 
 // Role represents a vault membership role.
@@ -35,6 +36,11 @@ const (
 type vaultMeta struct {
 	Owner   string `json:"owner"`
 	Created string `json:"created"`
+}
+
+type pendingInvite struct {
+	WrappedKey []byte `json:"wrapped_key"`
+	Created    string `json:"created"`
 }
 
 // Manager handles vault operations: create, key management, and access control.
@@ -201,7 +207,15 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 		return "", fmt.Errorf("wrap vault key with token: %w", err)
 	}
 
-	if err := m.store.WritePendingInvite(name, targetUser, wrappedWithToken); err != nil {
+	invite := pendingInvite{
+		WrappedKey: wrappedWithToken,
+		Created:    time.Now().UTC().Format(time.RFC3339),
+	}
+	inviteData, err := json.Marshal(invite)
+	if err != nil {
+		return "", fmt.Errorf("marshal pending invite: %w", err)
+	}
+	if err := m.store.WritePendingInvite(name, targetUser, inviteData); err != nil {
 		return "", fmt.Errorf("write pending invite: %w", err)
 	}
 
@@ -212,10 +226,27 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 // decrypts the vault key, and re-encrypts it with their own agent-derived key.
 func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) error {
 	// Read the pending invite
-	wrappedWithToken, err := m.store.ReadPendingInvite(name, username)
+	inviteData, err := m.store.ReadPendingInvite(name, username)
 	if err != nil {
 		return fmt.Errorf("read pending invite: %w", err)
 	}
+
+	var invite pendingInvite
+	if err := json.Unmarshal(inviteData, &invite); err != nil {
+		return fmt.Errorf("unmarshal pending invite: %w", err)
+	}
+
+	// Check if the invite has expired
+	created, err := time.Parse(time.RFC3339, invite.Created)
+	if err != nil {
+		return fmt.Errorf("parse invite timestamp: %w", err)
+	}
+	if time.Since(created) > vaultInviteTTL {
+		m.store.DeletePendingInvite(name, username)
+		return fmt.Errorf("vault invite has expired")
+	}
+
+	wrappedWithToken := invite.WrappedKey
 
 	// Derive the token key and decrypt the vault key
 	tokenRaw, err := hexDecode(token)
