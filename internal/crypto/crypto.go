@@ -97,7 +97,7 @@ func (e *Encryptor) deriveKey(ag agent.ExtendedAgent, pubKey ssh.PublicKey, serv
 // deterministic challenge, then running the signature through HKDF-SHA256
 // with the given salt.
 func (e *Encryptor) deriveKeyWithSalt(ag agent.ExtendedAgent, pubKey ssh.PublicKey, serverSecret []byte, username, path string, salt []byte) ([]byte, error) {
-	challenge := buildChallenge(serverSecret, username, path)
+	challenge := BuildChallenge(serverSecret, username, path)
 
 	sig, err := ag.Sign(pubKey, challenge)
 	if err != nil {
@@ -113,9 +113,9 @@ func (e *Encryptor) deriveKeyWithSalt(ag agent.ExtendedAgent, pubKey ssh.PublicK
 	return key, nil
 }
 
-// buildChallenge constructs the deterministic challenge that the agent signs.
+// BuildChallenge constructs the deterministic challenge that the agent signs.
 // challenge = SHA-256(serverSecret + ":" + "keyhole-v1:" + username + ":" + path)
-func buildChallenge(serverSecret []byte, username, path string) []byte {
+func BuildChallenge(serverSecret []byte, username, path string) []byte {
 	h := sha256.New()
 	h.Write(serverSecret)
 	h.Write([]byte(":"))

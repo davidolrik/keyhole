@@ -22,7 +22,6 @@ import (
 
 const (
 	vaultKeySize     = 512 // 4096 bits
-	challengeVer     = "keyhole-v1"
 	wrappingHKDFInfo = "keyhole-vault-wrapping-v1"
 	vaultInviteTTL   = 72 * time.Hour
 )
@@ -572,7 +571,7 @@ func (m *Manager) deriveWrappingKeyLegacy(username, vaultName string, ag agent.E
 
 func (m *Manager) deriveWrappingKeyWithSalt(username, vaultName string, ag agent.ExtendedAgent, pubKey ssh.PublicKey, salt []byte) ([]byte, error) {
 	path := "__vault_key__/" + vaultName
-	challenge := buildChallenge(m.serverSecret, username, path)
+	challenge := crypto.BuildChallenge(m.serverSecret, username, path)
 
 	sig, err := ag.Sign(pubKey, challenge)
 	if err != nil {
@@ -587,19 +586,6 @@ func (m *Manager) deriveWrappingKeyWithSalt(username, vaultName string, ag agent
 	}
 	return key, nil
 }
-
-// buildChallenge constructs the deterministic challenge for agent signing.
-func buildChallenge(serverSecret []byte, username, path string) []byte {
-	h := sha256.New()
-	h.Write(serverSecret)
-	h.Write([]byte(":"))
-	h.Write([]byte(challengeVer + ":"))
-	h.Write([]byte(username))
-	h.Write([]byte(":"))
-	h.Write([]byte(path))
-	return h.Sum(nil)
-}
-
 
 const maxVaultNameLength = 64
 
