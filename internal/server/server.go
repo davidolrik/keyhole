@@ -36,23 +36,28 @@ const keyVerifiedKey contextKey = "keyVerified"
 const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 const (
-	defaultConnRateLimit   = 10
-	defaultIdleTimeout     = 60 * time.Second
-	defaultMaxTimeout      = 5 * time.Minute
-	defaultReadLineTimeout = 90 * time.Second
-	defaultMaxConnections  = 256
+	defaultConnRateLimit           = 10
+	defaultIdleTimeout             = 60 * time.Second
+	defaultMaxTimeout              = 5 * time.Minute
+	defaultReadLineTimeout         = 90 * time.Second
+	defaultMaxConnections          = 256
+	defaultInviteCodeTTL           = 72 * time.Hour
+	defaultConsumedInviteRetention = 720 * time.Hour // 30 days
+	inviteCleanupInterval          = 24 * time.Hour
 )
 
 // Config holds the runtime configuration for the server.
 type Config struct {
-	Listen          string
-	DataDir         string
-	Admins          []string
-	ServerSecret    []byte // alphanumeric; if empty, loaded from {DataDir}/server_secret
-	Version         string
-	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (10)
-	ReadLineTimeout time.Duration // timeout for reading a line of input; 0 = default (60s)
-	MaxConnections  int           // max concurrent SSH connections; 0 = default (256)
+	Listen                  string
+	DataDir                 string
+	Admins                  []string
+	ServerSecret            []byte        // alphanumeric; if empty, loaded from {DataDir}/server_secret
+	Version                 string
+	ConnRateLimit           int           // max auth attempts per minute per IP; 0 = default (10)
+	ReadLineTimeout         time.Duration // timeout for reading a line of input; 0 = default (60s)
+	MaxConnections          int           // max concurrent SSH connections; 0 = default (256)
+	InviteCodeTTL           time.Duration // how long invite codes are valid; 0 = default (72h)
+	ConsumedInviteRetention time.Duration // how long to keep consumed invites; 0 = default (720h / 30 days)
 }
 
 // Server is the keyhole SSH server.
@@ -66,6 +71,7 @@ type Server struct {
 	auditLog     *audit.Logger
 	connLimiter  *rateLimiter
 	connSem      chan struct{} // semaphore to limit concurrent connections
+	cleanupStop  chan struct{} // signals the invite cleanup goroutine to stop
 }
 
 // New creates a new Server, initializing host key and server secret on first run.
@@ -96,13 +102,22 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 
-	cleanupExpiredInvites(cfg.DataDir)
+	inviteCodeTTL := cfg.InviteCodeTTL
+	if inviteCodeTTL == 0 {
+		inviteCodeTTL = defaultInviteCodeTTL
+	}
+	consumedRetention := cfg.ConsumedInviteRetention
+	if consumedRetention == 0 {
+		consumedRetention = defaultConsumedInviteRetention
+	}
+
+	cleanupInvites(cfg.DataDir, inviteCodeTTL, consumedRetention)
 
 	readLineTimeout := cfg.ReadLineTimeout
 	if readLineTimeout == 0 {
 		readLineTimeout = defaultReadLineTimeout
 	}
-	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version, auditLog, readLineTimeout)
+	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version, auditLog, readLineTimeout, inviteCodeTTL)
 
 	connLimit := cfg.ConnRateLimit
 	if connLimit == 0 {
@@ -114,6 +129,7 @@ func New(cfg Config) (*Server, error) {
 		maxConns = defaultMaxConnections
 	}
 
+	cleanupStop := make(chan struct{})
 	s := &Server{
 		cfg:          cfg,
 		store:        store,
@@ -123,7 +139,9 @@ func New(cfg Config) (*Server, error) {
 		auditLog:     auditLog,
 		connLimiter:  newRateLimiter(connLimit, time.Minute),
 		connSem:      make(chan struct{}, maxConns),
+		cleanupStop:  cleanupStop,
 	}
+	go s.runInviteCleanup(cfg.DataDir, inviteCodeTTL, consumedRetention)
 
 	sshSrv := &ssh.Server{
 		IdleTimeout: defaultIdleTimeout,
@@ -184,8 +202,10 @@ func (s *Server) ListenAndServe() error {
 	return s.sshSrv.ListenAndServe()
 }
 
-// Close stops accepting connections and closes the audit log.
+// Close stops accepting connections, stops the invite cleanup goroutine,
+// and closes the audit log.
 func (s *Server) Close() error {
+	close(s.cleanupStop)
 	err := s.sshSrv.Close()
 	if closeErr := s.auditLog.Close(); closeErr != nil && err == nil {
 		err = closeErr
@@ -511,13 +531,16 @@ func generateAlphanumericSecret(length int) (string, error) {
 	return string(b), nil
 }
 
-const inviteCodeTTL = 72 * time.Hour
+// cleanupInvites removes expired invite codes and old consumed invites.
+func cleanupInvites(dataDir string, codeExpiry, consumedRetention time.Duration) {
+	cleanupDirByAge(filepath.Join(dataDir, "invites"), codeExpiry)
+	cleanupDirByAge(filepath.Join(dataDir, "invites", "consumed"), consumedRetention)
+}
 
-// cleanupExpiredInvites removes invite code files older than the invite TTL.
-// Called once at startup to prevent unbounded accumulation of expired invites.
-func cleanupExpiredInvites(dataDir string) {
-	inviteDir := filepath.Join(dataDir, "invites")
-	entries, err := os.ReadDir(inviteDir)
+// cleanupDirByAge removes regular files in dir whose modification time
+// is older than maxAge. Directories are skipped. Missing dirs are ignored.
+func cleanupDirByAge(dir string, maxAge time.Duration) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return // directory may not exist yet
 	}
@@ -529,11 +552,25 @@ func cleanupExpiredInvites(dataDir string) {
 		if err != nil {
 			continue
 		}
-		if time.Since(info.ModTime()) > inviteCodeTTL {
-			invitePath := filepath.Join(inviteDir, e.Name())
-			if err := os.Remove(invitePath); err != nil {
-				log.Printf("WARNING: failed to remove expired invite %s: %v", invitePath, err)
+		if time.Since(info.ModTime()) > maxAge {
+			path := filepath.Join(dir, e.Name())
+			if err := os.Remove(path); err != nil {
+				log.Printf("WARNING: failed to remove stale invite %s: %v", path, err)
 			}
+		}
+	}
+}
+
+// runInviteCleanup periodically cleans up expired and consumed invites.
+func (s *Server) runInviteCleanup(dataDir string, codeExpiry, consumedRetention time.Duration) {
+	ticker := time.NewTicker(inviteCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.cleanupStop:
+			return
+		case <-ticker.C:
+			cleanupInvites(dataDir, codeExpiry, consumedRetention)
 		}
 	}
 }

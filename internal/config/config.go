@@ -12,10 +12,12 @@ import (
 
 // Config holds the server configuration.
 type Config struct {
-	Listen       string   `hcl:"listen,optional"`        // address to listen on (e.g. ":2222")
-	DataDir      string   `hcl:"data_dir,optional"`      // root data directory
-	Admins       []string `hcl:"admins,optional"`        // usernames allowed to run admin commands
-	ServerSecret string   `hcl:"server_secret,optional"` // alphanumeric server secret
+	Listen                  string   `hcl:"listen,optional"`                    // address to listen on (e.g. ":2222")
+	DataDir                 string   `hcl:"data_dir,optional"`                  // root data directory
+	Admins                  []string `hcl:"admins,optional"`                    // usernames allowed to run admin commands
+	ServerSecret            string   `hcl:"server_secret,optional"`             // alphanumeric server secret
+	InviteCodeTTL           string   `hcl:"invite_code_ttl,optional"`           // how long invite codes are valid (e.g. "72h")
+	ConsumedInviteRetention string   `hcl:"consumed_invite_retention,optional"` // how long to keep consumed invites (e.g. "720h")
 }
 
 // LoadFile reads and decodes an HCL config file. Returns (nil, nil) if the file doesn't exist.
@@ -55,6 +57,8 @@ func LoadEnv() Config {
 	cfg.Listen = os.Getenv("KEYHOLE_LISTEN")
 	cfg.DataDir = os.Getenv("KEYHOLE_DATA_DIR")
 	cfg.ServerSecret = os.Getenv("KEYHOLE_SERVER_SECRET")
+	cfg.InviteCodeTTL = os.Getenv("KEYHOLE_INVITE_CODE_TTL")
+	cfg.ConsumedInviteRetention = os.Getenv("KEYHOLE_CONSUMED_INVITE_RETENTION")
 	if admins := os.Getenv("KEYHOLE_ADMINS"); admins != "" {
 		cfg.Admins = ParseAdmins(admins)
 	}
@@ -78,6 +82,12 @@ func Merge(configs ...Config) Config {
 		if c.Admins != nil {
 			result.Admins = c.Admins
 		}
+		if c.InviteCodeTTL != "" {
+			result.InviteCodeTTL = c.InviteCodeTTL
+		}
+		if c.ConsumedInviteRetention != "" {
+			result.ConsumedInviteRetention = c.ConsumedInviteRetention
+		}
 	}
 	return result
 }
@@ -89,9 +99,11 @@ func Default() Config {
 		home = "."
 	}
 	return Config{
-		Listen:  ":2222",
-		DataDir: filepath.Join(home, ".keyhole"),
-		Admins:  nil,
+		Listen:                  ":2222",
+		DataDir:                 filepath.Join(home, ".keyhole"),
+		Admins:                  nil,
+		InviteCodeTTL:           "72h",
+		ConsumedInviteRetention: "720h",
 	}
 }
 

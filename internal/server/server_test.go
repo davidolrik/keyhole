@@ -1827,6 +1827,141 @@ func TestCleanupExpiredInvitesOnStartup(t *testing.T) {
 	}
 }
 
+func TestCleanupConsumedInvitesOnStartup(t *testing.T) {
+	dataDir := testDataDir(t)
+
+	// Create consumed invites directory with old and recent files
+	consumedDir := filepath.Join(dataDir, "invites", "consumed")
+	if err := os.MkdirAll(consumedDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a recent consumed invite
+	recentPath := filepath.Join(consumedDir, "kh_recent")
+	if err := os.WriteFile(recentPath, []byte("2026-03-17T00:00:00Z"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an old consumed invite and backdate its modification time
+	oldPath := filepath.Join(consumedDir, "kh_old")
+	if err := os.WriteFile(oldPath, []byte("2026-01-01T00:00:00Z"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().Add(-31 * 24 * time.Hour) // older than default 30-day retention
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	// Starting the server should clean up old consumed invites
+	cfg := server.Config{DataDir: dataDir}
+	_, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Old consumed invite should be removed
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("old consumed invite should be removed on startup")
+	}
+
+	// Recent consumed invite should remain
+	if _, err := os.Stat(recentPath); err != nil {
+		t.Error("recent consumed invite should not be removed on startup")
+	}
+}
+
+func TestCleanupConsumedInvitesRespectsConfig(t *testing.T) {
+	dataDir := testDataDir(t)
+
+	consumedDir := filepath.Join(dataDir, "invites", "consumed")
+	if err := os.MkdirAll(consumedDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a consumed invite 2 hours old
+	oldPath := filepath.Join(consumedDir, "kh_old")
+	if err := os.WriteFile(oldPath, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	twoHoursAgo := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(oldPath, twoHoursAgo, twoHoursAgo); err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure a very short retention of 1 hour
+	cfg := server.Config{
+		DataDir:                 dataDir,
+		ConsumedInviteRetention: 1 * time.Hour,
+	}
+	_, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// The 2-hour-old consumed invite should be removed with 1h retention
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("consumed invite older than retention should be removed")
+	}
+}
+
+func TestCleanupExpiredInvitesRespectsConfig(t *testing.T) {
+	dataDir := testDataDir(t)
+
+	inviteDir := filepath.Join(dataDir, "invites")
+	if err := os.MkdirAll(inviteDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an invite 2 hours old
+	invitePath := filepath.Join(inviteDir, "kh_test")
+	if err := os.WriteFile(invitePath, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	twoHoursAgo := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(invitePath, twoHoursAgo, twoHoursAgo); err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure a short invite TTL of 1 hour
+	cfg := server.Config{
+		DataDir:      dataDir,
+		InviteCodeTTL: 1 * time.Hour,
+	}
+	_, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// The 2-hour-old invite should be removed with 1h TTL
+	if _, err := os.Stat(invitePath); !os.IsNotExist(err) {
+		t.Error("invite older than configured TTL should be removed")
+	}
+}
+
+func TestCleanupGoroutineStopsOnClose(t *testing.T) {
+	dataDir := testDataDir(t)
+
+	cfg := server.Config{DataDir: dataDir}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Close should return without hanging (the cleanup goroutine should stop)
+	done := make(chan struct{})
+	go func() {
+		srv.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return in time — cleanup goroutine may not have stopped")
+	}
+}
+
 func TestSanitizeErrorStripsInternalDetails(t *testing.T) {
 	// sanitizeError is tested indirectly — errors returned by handler.Handle
 	// go through sanitizeError in sessionHandler before reaching the client.

@@ -214,6 +214,68 @@ func TestLoadFile_WorldReadableWithoutSecret(t *testing.T) {
 	}
 }
 
+func TestLoadFile_InviteTTLFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keyhole.hcl")
+	content := `
+invite_code_ttl            = "48h"
+consumed_invite_retention  = "168h"
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.InviteCodeTTL != "48h" {
+		t.Errorf("InviteCodeTTL = %q, want %q", cfg.InviteCodeTTL, "48h")
+	}
+	if cfg.ConsumedInviteRetention != "168h" {
+		t.Errorf("ConsumedInviteRetention = %q, want %q", cfg.ConsumedInviteRetention, "168h")
+	}
+}
+
+func TestLoadEnv_InviteTTLFields(t *testing.T) {
+	t.Setenv("KEYHOLE_INVITE_CODE_TTL", "24h")
+	t.Setenv("KEYHOLE_CONSUMED_INVITE_RETENTION", "360h")
+
+	cfg := LoadEnv()
+	if cfg.InviteCodeTTL != "24h" {
+		t.Errorf("InviteCodeTTL = %q, want %q", cfg.InviteCodeTTL, "24h")
+	}
+	if cfg.ConsumedInviteRetention != "360h" {
+		t.Errorf("ConsumedInviteRetention = %q, want %q", cfg.ConsumedInviteRetention, "360h")
+	}
+}
+
+func TestMerge_InviteTTLFields(t *testing.T) {
+	defaults := Config{InviteCodeTTL: "72h", ConsumedInviteRetention: "720h"}
+	file := Config{InviteCodeTTL: "48h"}
+	env := Config{}
+	cli := Config{ConsumedInviteRetention: "168h"}
+
+	got := Merge(defaults, file, env, cli)
+
+	if got.InviteCodeTTL != "48h" {
+		t.Errorf("InviteCodeTTL = %q, want %q (file override)", got.InviteCodeTTL, "48h")
+	}
+	if got.ConsumedInviteRetention != "168h" {
+		t.Errorf("ConsumedInviteRetention = %q, want %q (cli override)", got.ConsumedInviteRetention, "168h")
+	}
+}
+
+func TestDefault_InviteTTLFields(t *testing.T) {
+	cfg := Default()
+	if cfg.InviteCodeTTL != "72h" {
+		t.Errorf("InviteCodeTTL = %q, want %q", cfg.InviteCodeTTL, "72h")
+	}
+	if cfg.ConsumedInviteRetention != "720h" {
+		t.Errorf("ConsumedInviteRetention = %q, want %q", cfg.ConsumedInviteRetention, "720h")
+	}
+}
+
 func TestParseAdmins(t *testing.T) {
 	tests := []struct {
 		input string

@@ -26,7 +26,6 @@ const (
 	maxSecretSize   = 64 * 1024 // 64KB
 	maxSetAttempts  = 3
 	inviteCodeBytes = 32
-	inviteCodeTTL   = 72 * time.Hour
 )
 
 // Handler routes parsed commands to storage and crypto operations.
@@ -41,10 +40,11 @@ type Handler struct {
 	version         string
 	auditLog        *audit.Logger
 	readLineTimeout time.Duration
+	inviteCodeTTL   time.Duration
 }
 
 // NewHandler creates a Handler.
-func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string, auditLog *audit.Logger, readLineTimeout time.Duration) *Handler {
+func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string, auditLog *audit.Logger, readLineTimeout time.Duration, inviteCodeTTL time.Duration) *Handler {
 	adminSet := make(map[string]bool, len(admins))
 	for _, a := range admins {
 		adminSet[a] = true
@@ -60,6 +60,7 @@ func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.E
 		version:         version,
 		auditLog:        auditLog,
 		readLineTimeout: readLineTimeout,
+		inviteCodeTTL:   inviteCodeTTL,
 	}
 }
 
@@ -718,7 +719,7 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	}
 	if len(inviteData) > 0 {
 		created, err := time.Parse(time.RFC3339, string(inviteData))
-		if err == nil && time.Since(created) > inviteCodeTTL {
+		if err == nil && time.Since(created) > h.inviteCodeTTL {
 			if rmErr := os.Remove(invitePath); rmErr != nil {
 				log.Printf("WARNING: failed to remove expired invite %s: %v", invitePath, rmErr)
 			}

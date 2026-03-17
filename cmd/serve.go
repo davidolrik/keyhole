@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -75,12 +77,32 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	serverSecret := []byte(cfg.ServerSecret)
 	cfg.ServerSecret = ""
+
+	var inviteCodeTTL time.Duration
+	if cfg.InviteCodeTTL != "" {
+		var err error
+		inviteCodeTTL, err = time.ParseDuration(cfg.InviteCodeTTL)
+		if err != nil {
+			return fmt.Errorf("invalid invite_code_ttl %q: %w", cfg.InviteCodeTTL, err)
+		}
+	}
+	var consumedInviteRetention time.Duration
+	if cfg.ConsumedInviteRetention != "" {
+		var err error
+		consumedInviteRetention, err = time.ParseDuration(cfg.ConsumedInviteRetention)
+		if err != nil {
+			return fmt.Errorf("invalid consumed_invite_retention %q: %w", cfg.ConsumedInviteRetention, err)
+		}
+	}
+
 	srv, err := server.New(server.Config{
-		Listen:       cfg.Listen,
-		DataDir:      cfg.DataDir,
-		Admins:       cfg.Admins,
-		ServerSecret: serverSecret,
-		Version:      Version,
+		Listen:                  cfg.Listen,
+		DataDir:                 cfg.DataDir,
+		Admins:                  cfg.Admins,
+		ServerSecret:            serverSecret,
+		Version:                 Version,
+		InviteCodeTTL:           inviteCodeTTL,
+		ConsumedInviteRetention: consumedInviteRetention,
 	})
 	if err != nil {
 		return err
