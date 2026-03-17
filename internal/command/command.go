@@ -232,11 +232,17 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 1 {
 			return Command{}, fmt.Errorf("vault create requires exactly one name argument")
 		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
+		}
 		return Command{Op: OpVaultCreate, Vault: subArgs[0]}, nil
 
 	case "invite":
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault invite requires <name> <user>")
+		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
 		}
 		if err := validateUsername(subArgs[1]); err != nil {
 			return Command{}, fmt.Errorf("target user: %w", err)
@@ -247,11 +253,17 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault accept requires <name> <token>")
 		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
+		}
 		return Command{Op: OpVaultAccept, Vault: subArgs[0], InviteCode: subArgs[1]}, nil
 
 	case "promote":
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault promote requires <name> <user>")
+		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
 		}
 		if err := validateUsername(subArgs[1]); err != nil {
 			return Command{}, fmt.Errorf("target user: %w", err)
@@ -262,6 +274,9 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault demote requires <name> <user>")
 		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
+		}
 		if err := validateUsername(subArgs[1]); err != nil {
 			return Command{}, fmt.Errorf("target user: %w", err)
 		}
@@ -270,6 +285,9 @@ func parseVaultSubcommand(args []string) (Command, error) {
 	case "members":
 		if len(subArgs) != 1 {
 			return Command{}, fmt.Errorf("vault members requires exactly one name argument")
+		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
 		}
 		return Command{Op: OpVaultMembers, Vault: subArgs[0]}, nil
 
@@ -283,11 +301,17 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 1 {
 			return Command{}, fmt.Errorf("vault destroy requires exactly one name argument")
 		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
+		}
 		return Command{Op: OpVaultDestroy, Vault: subArgs[0]}, nil
 
 	case "revoke":
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault revoke requires <name> <user>")
+		}
+		if err := validateVaultName(subArgs[0]); err != nil {
+			return Command{}, err
 		}
 		if err := validateUsername(subArgs[1]); err != nil {
 			return Command{}, fmt.Errorf("target user: %w", err)
@@ -327,6 +351,26 @@ func parseMoveCommand(args []string) (Command, error) {
 func validateVaultRef(name string) error {
 	if name == "" {
 		return nil
+	}
+	for _, c := range name {
+		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {
+			return fmt.Errorf("vault name contains invalid character %q", c)
+		}
+	}
+	return nil
+}
+
+// validateVaultName validates a vault name used in vault management subcommands.
+// Mirrors vault.ValidateVaultName to catch invalid names at parse time.
+func validateVaultName(name string) error {
+	if name == "" {
+		return fmt.Errorf("vault name cannot be empty")
+	}
+	if name == "personal" {
+		return fmt.Errorf("vault name %q is reserved", name)
+	}
+	if strings.HasPrefix(name, "_") {
+		return fmt.Errorf("vault names starting with '_' are reserved")
 	}
 	for _, c := range name {
 		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {

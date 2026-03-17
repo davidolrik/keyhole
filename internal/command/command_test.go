@@ -268,6 +268,57 @@ func TestParseVaultSyntax(t *testing.T) {
 			want: command.Command{Op: command.OpMove, Vault: "tv", Path: "secret", TargetPath: "secret"},
 		},
 		// Error cases
+		// Vault name validation across all subcommands
+		{
+			name:    "vault create with traversal name",
+			argv:    []string{"vault", "create", "../evil"},
+			wantErr: true,
+		},
+		{
+			name:    "vault create with reserved name personal",
+			argv:    []string{"vault", "create", "personal"},
+			wantErr: true,
+		},
+		{
+			name:    "vault create with underscore prefix",
+			argv:    []string{"vault", "create", "_internal"},
+			wantErr: true,
+		},
+		{
+			name:    "vault invite with traversal name",
+			argv:    []string{"vault", "invite", "../evil", "bob"},
+			wantErr: true,
+		},
+		{
+			name:    "vault accept with traversal name",
+			argv:    []string{"vault", "accept", "../evil", "abc123"},
+			wantErr: true,
+		},
+		{
+			name:    "vault promote with traversal name",
+			argv:    []string{"vault", "promote", "../evil", "bob"},
+			wantErr: true,
+		},
+		{
+			name:    "vault demote with traversal name",
+			argv:    []string{"vault", "demote", "../evil", "bob"},
+			wantErr: true,
+		},
+		{
+			name:    "vault members with traversal name",
+			argv:    []string{"vault", "members", "../evil"},
+			wantErr: true,
+		},
+		{
+			name:    "vault destroy with traversal name",
+			argv:    []string{"vault", "destroy", "../evil"},
+			wantErr: true,
+		},
+		{
+			name:    "vault revoke with traversal name",
+			argv:    []string{"vault", "revoke", "../evil", "bob"},
+			wantErr: true,
+		},
 		{
 			name:    "vault no subcommand",
 			argv:    []string{"vault"},
