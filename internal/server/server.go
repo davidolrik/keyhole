@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
@@ -31,13 +32,22 @@ const keyVerifiedKey contextKey = "keyVerified"
 
 const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+const (
+	defaultConnRateLimit   = 10
+	defaultIdleTimeout     = 60 * time.Second
+	defaultMaxTimeout      = 5 * time.Minute
+	defaultReadLineTimeout = 90 * time.Second
+)
+
 // Config holds the runtime configuration for the server.
 type Config struct {
-	Listen       string
-	DataDir      string
-	Admins       []string
-	ServerSecret string // alphanumeric; if empty, loaded from {DataDir}/server_secret
-	Version      string
+	Listen          string
+	DataDir         string
+	Admins          []string
+	ServerSecret    string // alphanumeric; if empty, loaded from {DataDir}/server_secret
+	Version         string
+	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (60)
+	ReadLineTimeout time.Duration // timeout for reading a line of input; 0 = default (60s)
 }
 
 // Server is the keyhole SSH server.
@@ -49,6 +59,7 @@ type Server struct {
 	serverSecret []byte
 	hostKey      gossh.Signer
 	auditLog     *audit.Logger
+	connLimiter  *rateLimiter
 }
 
 // New creates a new Server, initializing host key and server secret on first run.
@@ -76,7 +87,16 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 
-	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version, auditLog)
+	readLineTimeout := cfg.ReadLineTimeout
+	if readLineTimeout == 0 {
+		readLineTimeout = defaultReadLineTimeout
+	}
+	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version, auditLog, readLineTimeout)
+
+	connLimit := cfg.ConnRateLimit
+	if connLimit == 0 {
+		connLimit = defaultConnRateLimit
+	}
 
 	s := &Server{
 		cfg:          cfg,
@@ -85,9 +105,12 @@ func New(cfg Config) (*Server, error) {
 		serverSecret: serverSecret,
 		hostKey:      hostKey,
 		auditLog:     auditLog,
+		connLimiter:  newRateLimiter(connLimit, time.Minute),
 	}
 
 	sshSrv := &ssh.Server{
+		IdleTimeout: defaultIdleTimeout,
+		MaxTimeout:  defaultMaxTimeout,
 		HostSigners: []ssh.Signer{hostKey},
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			return s.publicKeyHandler(ctx, key)
@@ -131,6 +154,13 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	username := ctx.User()
 	remote := ctx.RemoteAddr().String()
+
+	// Rate limit per IP to prevent brute-force and DoS attacks.
+	ip, _, _ := net.SplitHostPort(remote)
+	if !s.connLimiter.allow(ip) {
+		s.auditLog.AuthDenied(username, remote, "rate limited")
+		return false
+	}
 
 	if key.Type() != gossh.KeyAlgoED25519 {
 		reason := "non-Ed25519 key type " + key.Type()

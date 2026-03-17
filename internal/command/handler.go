@@ -30,33 +30,35 @@ const (
 
 // Handler routes parsed commands to storage and crypto operations.
 type Handler struct {
-	store        storage.Store
-	fileStore    *storage.FileStore
-	enc          *crypto.Encryptor
-	vaultMgr     *vault.Manager
-	serverSecret []byte
-	dataDir      string
-	admins       map[string]bool
-	version      string
-	auditLog     *audit.Logger
+	store           storage.Store
+	fileStore       *storage.FileStore
+	enc             *crypto.Encryptor
+	vaultMgr        *vault.Manager
+	serverSecret    []byte
+	dataDir         string
+	admins          map[string]bool
+	version         string
+	auditLog        *audit.Logger
+	readLineTimeout time.Duration
 }
 
 // NewHandler creates a Handler.
-func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string, auditLog *audit.Logger) *Handler {
+func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string, auditLog *audit.Logger, readLineTimeout time.Duration) *Handler {
 	adminSet := make(map[string]bool, len(admins))
 	for _, a := range admins {
 		adminSet[a] = true
 	}
 	return &Handler{
-		store:        store,
-		fileStore:    fileStore,
-		enc:          enc,
-		vaultMgr:     vaultMgr,
-		serverSecret: serverSecret,
-		dataDir:      dataDir,
-		admins:       adminSet,
-		version:      version,
-		auditLog:     auditLog,
+		store:           store,
+		fileStore:       fileStore,
+		enc:             enc,
+		vaultMgr:        vaultMgr,
+		serverSecret:    serverSecret,
+		dataDir:         dataDir,
+		admins:          adminSet,
+		version:         version,
+		auditLog:        auditLog,
+		readLineTimeout: readLineTimeout,
 	}
 }
 
@@ -142,7 +144,7 @@ func (h *Handler) handleSet(sess ssh.Session, username string, pubKey gossh.Publ
 
 	if isTerminal(sess) {
 		// PTY session: prompt with echo concealment and double-confirm
-		plaintext, err = promptSecret(sess)
+		plaintext, err = promptSecret(sess, h.readLineTimeout)
 		if err != nil {
 			return err
 		}
@@ -150,7 +152,7 @@ func (h *Handler) handleSet(sess ssh.Session, username string, pubKey gossh.Publ
 		// No PTY: print a prompt (visible for interactive users; harmless for piped input).
 		// Echo is not suppressed — use 'ssh -t' for hidden input.
 		fmt.Fprint(sess.Stderr(), "Enter secret (use 'ssh -t' for hidden input): ")
-		plaintext, err = readLine(sess)
+		plaintext, err = readLine(sess, h.readLineTimeout)
 		if err != nil {
 			return fmt.Errorf("read secret: %w", err)
 		}
@@ -272,13 +274,13 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 
 	var plaintext []byte
 	if isTerminal(sess) {
-		plaintext, err = promptSecret(sess)
+		plaintext, err = promptSecret(sess, h.readLineTimeout)
 		if err != nil {
 			return err
 		}
 	} else {
 		fmt.Fprint(sess.Stderr(), "Enter secret (use 'ssh -t' for hidden input): ")
-		plaintext, err = readLine(sess)
+		plaintext, err = readLine(sess, h.readLineTimeout)
 		if err != nil {
 			return fmt.Errorf("read secret: %w", err)
 		}
@@ -471,7 +473,7 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 	fmt.Fprintln(sess, "This action cannot be undone.")
 	fmt.Fprintf(sess, "\nType the vault name to confirm: ")
 
-	confirmation, err := readLine(sess)
+	confirmation, err := readLine(sess, h.readLineTimeout)
 	if err != nil {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
@@ -877,11 +879,11 @@ func supportsColor(sess ssh.Session) bool {
 // promptSecret prompts the user to enter and confirm a secret with echo disabled.
 // promptSecret prompts for a secret with echo concealment and requires confirmation.
 // Requires a PTY (call only when isTerminal is true).
-func promptSecret(sess ssh.Session) ([]byte, error) {
+func promptSecret(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 	for attempt := 0; attempt < maxSetAttempts; attempt++ {
 		// \x1b[8m = ANSI "conceal" mode: text is invisible on screen (best-effort echo suppression)
 		fmt.Fprint(sess, "Enter secret: \x1b[8m")
-		first, err := readLine(sess)
+		first, err := readLine(sess, timeout)
 		fmt.Fprint(sess, "\x1b[0m") // reset concealment
 		if err != nil {
 			return nil, fmt.Errorf("read secret: %w", err)
@@ -889,7 +891,7 @@ func promptSecret(sess ssh.Session) ([]byte, error) {
 		fmt.Fprintln(sess)
 
 		fmt.Fprint(sess, "Confirm secret: \x1b[8m")
-		second, err := readLine(sess)
+		second, err := readLine(sess, timeout)
 		fmt.Fprint(sess, "\x1b[0m")
 		if err != nil {
 			return nil, fmt.Errorf("read confirmation: %w", err)
@@ -905,28 +907,46 @@ func promptSecret(sess ssh.Session) ([]byte, error) {
 }
 
 // readLine reads one line from the session, stopping at newline or EOF.
-func readLine(sess ssh.Session) ([]byte, error) {
-	var buf []byte
-	b := make([]byte, 1)
-	for {
-		n, err := sess.Read(b)
-		if n > 0 {
-			if b[0] == '\n' || b[0] == '\r' {
+// A timeout limits how long the entire read can take, preventing slow
+// trickle attacks from holding goroutines indefinitely.
+func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
+	type result struct {
+		data []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		var buf []byte
+		b := make([]byte, 1)
+		for {
+			n, err := sess.Read(b)
+			if n > 0 {
+				if b[0] == '\n' || b[0] == '\r' {
+					break
+				}
+				buf = append(buf, b[0])
+			}
+			if err == io.EOF {
 				break
 			}
-			buf = append(buf, b[0])
+			if err != nil {
+				ch <- result{nil, err}
+				return
+			}
 		}
-		if err == io.EOF {
-			break
+		if len(buf) > maxSecretSize {
+			ch <- result{nil, fmt.Errorf("secret too large (max %d bytes)", maxSecretSize)}
+			return
 		}
-		if err != nil {
-			return nil, err
-		}
+		ch <- result{buf, nil}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.data, r.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("read timeout")
 	}
-	if len(buf) > maxSecretSize {
-		return nil, fmt.Errorf("secret too large (max %d bytes)", maxSecretSize)
-	}
-	return buf, nil
 }
 
 // generateInviteCode generates a cryptographically random invite code.

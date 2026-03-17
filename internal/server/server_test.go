@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -1535,6 +1536,109 @@ func TestRegisterWithBadCodeDoesNotLeakUsername(t *testing.T) {
 	// Should say "invalid invite code", NOT "username already exists"
 	if strings.Contains(out, "already exists") {
 		t.Error("error message leaks that username exists")
+	}
+}
+
+func TestConnectionRateLimit(t *testing.T) {
+	dataDir := t.TempDir()
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{
+		DataDir:       dataDir,
+		Admins:        []string{"alice"},
+		ConnRateLimit: 5,
+	}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	if err := srv.AddUserKey("alice", alice.sshPub); err != nil {
+		t.Fatalf("AddUserKey: %v", err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	addr := ln.Addr().String()
+
+	var rejected bool
+	for i := 0; i < 10; i++ {
+		_, err := sshRun(t, addr, alice.cfg, alice.ag, "help")
+		if err != nil {
+			rejected = true
+			break
+		}
+	}
+	if !rejected {
+		t.Error("expected rate limit to reject connections after limit exceeded")
+	}
+}
+
+func TestReadLineTimeout(t *testing.T) {
+	dataDir := t.TempDir()
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{
+		DataDir:         dataDir,
+		Admins:          []string{"alice"},
+		ReadLineTimeout: 200 * time.Millisecond,
+	}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	if err := srv.AddUserKey("alice", alice.sshPub); err != nil {
+		t.Fatalf("AddUserKey: %v", err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	addr := ln.Addr().String()
+
+	// Run "set" with a blocking stdin — should timeout, not hang
+	start := time.Now()
+
+	conn, err := gossh.Dial("tcp", addr, alice.cfg)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	sess, err := conn.NewSession()
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	defer sess.Close()
+	if err := agent.ForwardToAgent(conn, alice.ag); err != nil {
+		t.Fatalf("ForwardToAgent: %v", err)
+	}
+	if err := agent.RequestAgentForwarding(sess); err != nil {
+		t.Fatalf("RequestAgentForwarding: %v", err)
+	}
+	// Stdin that never sends data — blocks forever without timeout
+	pr, _ := io.Pipe()
+	sess.Stdin = pr
+	var out syncBuffer
+	sess.Stdout = &out
+	sess.Stderr = &out
+	err = sess.Run("set test/key")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error from read timeout")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("readLine took %v, expected timeout around 200ms", elapsed)
 	}
 }
 
