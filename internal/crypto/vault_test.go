@@ -126,3 +126,64 @@ func TestDecryptWithKeyTruncatedData(t *testing.T) {
 		t.Error("expected error for truncated ciphertext")
 	}
 }
+
+func TestDecryptWithKeyRejectsTamperedCiphertext(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	plaintext := []byte("authentic data")
+
+	ciphertext, err := crypto.EncryptWithKey(key, plaintext)
+	if err != nil {
+		t.Fatalf("EncryptWithKey: %v", err)
+	}
+
+	// Flip a bit in the ciphertext body (after the 12-byte nonce)
+	tampered := make([]byte, len(ciphertext))
+	copy(tampered, ciphertext)
+	tampered[len(tampered)-1] ^= 0x01
+
+	_, err = crypto.DecryptWithKey(key, tampered)
+	if err == nil {
+		t.Error("expected error when decrypting tampered ciphertext")
+	}
+
+	// Flip a bit in the nonce
+	tamperedNonce := make([]byte, len(ciphertext))
+	copy(tamperedNonce, ciphertext)
+	tamperedNonce[0] ^= 0x01
+
+	_, err = crypto.DecryptWithKey(key, tamperedNonce)
+	if err == nil {
+		t.Error("expected error when decrypting ciphertext with tampered nonce")
+	}
+
+	// Append extra byte
+	extended := append(ciphertext, 0x42)
+	_, err = crypto.DecryptWithKey(key, extended)
+	if err == nil {
+		t.Error("expected error when decrypting ciphertext with appended data")
+	}
+}
+
+func TestDecryptPersonalRejectsTamperedCiphertext(t *testing.T) {
+	ag, pubKey := newTestAgent(t)
+	serverSecret := []byte("test-server-secret")
+	enc := crypto.NewEncryptor()
+
+	ciphertext, err := enc.Encrypt(ag, pubKey, serverSecret, "alice", "path", []byte("secret"))
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	// Flip a bit in the ciphertext
+	tampered := make([]byte, len(ciphertext))
+	copy(tampered, ciphertext)
+	tampered[len(tampered)-1] ^= 0x01
+
+	_, err = enc.Decrypt(ag, pubKey, serverSecret, "alice", "path", tampered)
+	if err == nil {
+		t.Error("expected error when decrypting tampered ciphertext")
+	}
+}
