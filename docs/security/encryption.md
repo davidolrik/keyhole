@@ -9,7 +9,7 @@ Each personal secret gets its own encryption key, derived from your SSH agent si
 ```go
 challenge  = SHA-256(server_secret + ":" + "keyhole-v1:" + username + ":" + path)
 signature  = agent.Sign(your_ed25519_key, challenge)
-key        = HKDF-SHA256(signature, info="keyhole-key-v1")
+key        = HKDF-SHA256(signature, salt=server_secret, info="keyhole-key-v1")
 on-disk    = AES-256-GCM(key, nonce=random_12_bytes, plaintext)
 ```
 
@@ -30,7 +30,7 @@ Decrypting requires both your SSH private key (via agent) and the server secret.
 Vaults use a random 512-byte vault key shared among members. Each secret derives its own key from the vault key:
 
 ```go
-secret_key = HKDF-SHA256(vault_key, info="keyhole-vault-v1:<path>")
+secret_key = HKDF-SHA256(vault_key, salt=server_secret, info="keyhole-vault-v1:<path>")
 on-disk    = AES-256-GCM(secret_key, nonce=random_12_bytes, plaintext)
 ```
 
@@ -44,6 +44,19 @@ flowchart LR
 ## Vault key wrapping
 
 Each member's copy of the vault key is wrapped with a key derived from their SSH agent signature:
+
+```go
+// Member wrapping key
+challenge    = SHA-256(server_secret + ":" + "keyhole-v1:" + username + ":" + "__vault_key__/<vault_name>")
+signature    = agent.Sign(user_ed25519_key, challenge)
+wrapping_key = HKDF-SHA256(signature, salt=server_secret, info="keyhole-vault-wrapping-v1")
+wrapped_key  = AES-256-GCM(wrapping_key, nonce=random_12_bytes, vault_key)
+
+// Invite token key
+token     = random_32_bytes
+token_key = HKDF-SHA256(token, salt=server_secret, info="keyhole-vault-invite-v1:<vault_name>:<username>")
+pending   = AES-256-GCM(token_key, nonce=random_12_bytes, vault_key)
+```
 
 ```mermaid
 flowchart TD
