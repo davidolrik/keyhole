@@ -455,6 +455,8 @@ func (h *Handler) handleVaultRevoke(sess ssh.Session, username, vaultName, targe
 }
 
 func (h *Handler) handleVaultMembers(sess ssh.Session, username, vaultName string) error {
+	// HasAccess returns false for both non-existent vaults and non-members,
+	// producing a uniform error that doesn't leak vault existence.
 	if !h.vaultMgr.HasAccess(vaultName, username) {
 		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
 	}
@@ -487,13 +489,10 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 		return fmt.Errorf("cannot destroy the personal vault")
 	}
 
-	// Check ownership before prompting to avoid leaking vault existence
-	// to non-owners who guess a vault name.
+	// Use a single error message for both "vault not found" and "not owner"
+	// to avoid leaking vault existence to non-owners.
 	members, err := h.vaultMgr.Members(vaultName)
-	if err != nil {
-		return fmt.Errorf("destroy vault: %w", err)
-	}
-	if members[username] != "owner" {
+	if err != nil || members[username] != "owner" {
 		return fmt.Errorf("only the vault owner can destroy a vault")
 	}
 
