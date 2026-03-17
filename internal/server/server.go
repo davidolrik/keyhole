@@ -47,7 +47,7 @@ type Config struct {
 	Admins          []string
 	ServerSecret    string // alphanumeric; if empty, loaded from {DataDir}/server_secret
 	Version         string
-	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (60)
+	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (10)
 	ReadLineTimeout time.Duration // timeout for reading a line of input; 0 = default (60s)
 }
 
