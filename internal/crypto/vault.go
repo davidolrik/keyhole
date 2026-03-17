@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"runtime"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -17,6 +18,7 @@ func Zeroize(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
+	runtime.KeepAlive(b)
 }
 
 const vaultHKDFInfo = "keyhole-vault-v1"
