@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"go.olrik.dev/keyhole/internal/vault"
 )
 
 // Op is the type of command operation.
@@ -347,54 +349,20 @@ func parseMoveCommand(args []string) (Command, error) {
 	}, nil
 }
 
-const maxVaultNameLength = 64
 const maxUsernameLength = 64
 
 // validateVaultRef validates a vault name used in colon-syntax references.
+// Empty names are allowed (they represent the personal vault).
 func validateVaultRef(name string) error {
 	if name == "" {
 		return nil
 	}
-	if len(name) > maxVaultNameLength {
-		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
-	}
-	if name == "personal" {
-		return fmt.Errorf("vault name %q is reserved", name)
-	}
-	if strings.HasPrefix(name, "_") {
-		return fmt.Errorf("vault names starting with '_' are reserved")
-	}
-	for _, c := range name {
-		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' ||
-			c == '*' || c == '?' || c == '[' || c == ']' {
-			return fmt.Errorf("vault name contains invalid character %q", c)
-		}
-	}
-	return nil
+	return vault.ValidateVaultName(name)
 }
 
 // validateVaultName validates a vault name used in vault management subcommands.
-// Mirrors vault.ValidateVaultName to catch invalid names at parse time.
 func validateVaultName(name string) error {
-	if name == "" {
-		return fmt.Errorf("vault name cannot be empty")
-	}
-	if len(name) > maxVaultNameLength {
-		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
-	}
-	if name == "personal" {
-		return fmt.Errorf("vault name %q is reserved", name)
-	}
-	if strings.HasPrefix(name, "_") {
-		return fmt.Errorf("vault names starting with '_' are reserved")
-	}
-	for _, c := range name {
-		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' ||
-			c == '*' || c == '?' || c == '[' || c == ']' {
-			return fmt.Errorf("vault name contains invalid character %q", c)
-		}
-	}
-	return nil
+	return vault.ValidateVaultName(name)
 }
 
 // sanitizeGlobPrefix validates a glob prefix (the part before a trailing *).
