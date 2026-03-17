@@ -34,6 +34,8 @@ func DeriveVaultSecretKeyLegacy(vaultKey []byte, path string) ([]byte, error) {
 }
 
 func deriveVaultSecretKey(vaultKey []byte, path string, salt []byte) ([]byte, error) {
+	// Colon-separated info is unambiguous because paths are validated to
+	// reject ':' characters at input.
 	info := []byte(vaultHKDFInfo + ":" + path)
 	reader := hkdf.New(sha256.New, vaultKey, salt, info)
 	key := make([]byte, keySize)

@@ -533,6 +533,8 @@ func deriveTokenKey(tokenBytes, serverSecret []byte, vaultName, username string)
 }
 
 func deriveTokenKeyWithSalt(tokenBytes, salt []byte, vaultName, username string) ([]byte, error) {
+	// Colon-separated info is unambiguous because vault names and usernames
+	// are validated to reject ':' characters at input.
 	info := "keyhole-vault-invite-v1:" + vaultName + ":" + username
 	reader := hkdf.New(sha256.New, tokenBytes, salt, []byte(info))
 	key := make([]byte, 32)
