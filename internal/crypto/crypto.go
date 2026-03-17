@@ -37,6 +37,7 @@ func (e *Encryptor) encryptWithSalt(ag agent.ExtendedAgent, pubKey ssh.PublicKey
 	if err != nil {
 		return nil, fmt.Errorf("derive key: %w", err)
 	}
+	defer zeroize(key)
 	return EncryptWithKey(key, plaintext)
 }
 
@@ -48,6 +49,7 @@ func (e *Encryptor) Decrypt(ag agent.ExtendedAgent, pubKey ssh.PublicKey, server
 	if err != nil {
 		return nil, fmt.Errorf("derive key: %w", err)
 	}
+	defer zeroize(key)
 	return DecryptWithKey(key, ciphertext)
 }
 
@@ -68,6 +70,7 @@ func (e *Encryptor) DecryptAndUpgrade(ag agent.ExtendedAgent, pubKey ssh.PublicK
 		return nil, err
 	}
 	plaintext, legacyErr := DecryptWithKey(legacyKey, ciphertext)
+	zeroize(legacyKey)
 	if legacyErr != nil {
 		return nil, err
 	}

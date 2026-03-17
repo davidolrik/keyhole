@@ -11,6 +11,14 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// zeroize overwrites a byte slice with zeros to prevent key material from
+// lingering in memory longer than necessary.
+func zeroize(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
 const vaultHKDFInfo = "keyhole-vault-v1"
 
 // DeriveVaultSecretKey derives an AES-256 key from a vault key and path using
