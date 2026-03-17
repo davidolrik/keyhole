@@ -480,6 +480,16 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 		return fmt.Errorf("cannot destroy the personal vault")
 	}
 
+	// Check ownership before prompting to avoid leaking vault existence
+	// to non-owners who guess a vault name.
+	members, err := h.vaultMgr.Members(vaultName)
+	if err != nil {
+		return fmt.Errorf("destroy vault: %w", err)
+	}
+	if members[username] != "owner" {
+		return fmt.Errorf("only the vault owner can destroy a vault")
+	}
+
 	fmt.Fprintf(sess, "WARNING: This will permanently destroy vault %q and all its secrets.\n", vaultName)
 	fmt.Fprintln(sess, "This action cannot be undone.")
 	fmt.Fprintf(sess, "\nType the vault name to confirm: ")
