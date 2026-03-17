@@ -241,6 +241,12 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 		return "", fmt.Errorf("user %q is already a member of vault %q", targetUser, name)
 	}
 
+	// Reject if there's already a pending invite to avoid silently
+	// invalidating a previously issued token.
+	if _, err := m.store.ReadPendingInvite(name, targetUser); err == nil {
+		return "", fmt.Errorf("user %q already has a pending invite for vault %q", targetUser, name)
+	}
+
 	// Decrypt the inviter's vault key
 	vaultKey, err := m.VaultKey(name, inviter, ag, pubKey)
 	if err != nil {

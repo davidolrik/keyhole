@@ -727,38 +727,34 @@ func TestRevokeCleansUpPendingInvite(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)
 	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
 
 	mgr := vault.NewManager(store, []byte("server-secret"))
 	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// Alice invites bob (creates pending invite file)
-	_, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	// Invite bob, accept, then create a pending invite file manually
+	// to simulate an edge case where a pending invite exists for a member.
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
 	if err != nil {
 		t.Fatalf("Invite: %v", err)
 	}
-
-	// Verify pending invite file exists
-	invitePath := filepath.Join(dir, "vaults", "tv", "pending", "bob.invite")
-	if _, err := os.Stat(invitePath); err != nil {
-		t.Fatalf("pending invite should exist before revoke: %v", err)
-	}
-
-	// Revoke bob (even though he hasn't accepted yet, there might be a
-	// membership from a previous accept — simulate by adding bob as member first)
-	// First accept, then revoke to test the full flow
-	bobAg, bobPub := newTestAgent(t)
-	token2, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
-	if err != nil {
-		t.Fatalf("Invite (2nd): %v", err)
-	}
-	if err := mgr.Accept("tv", "bob", token2, bobAg, bobPub); err != nil {
+	if err := mgr.Accept("tv", "bob", token, bobAg, bobPub); err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
 
-	// Re-invite bob (creates a new pending invite while he's a member — shouldn't happen
-	// in practice but tests the cleanup path)
+	// Manually recreate a pending invite file (simulating a race or stale state)
+	invitePath := filepath.Join(dir, "vaults", "tv", "pending", "bob.invite")
+	os.MkdirAll(filepath.Dir(invitePath), 0700)
+	os.WriteFile(invitePath, []byte(`{"wrapped_key":"AA==","created":"2026-01-01T00:00:00Z"}`), 0600)
+
+	// Verify it exists
+	if _, err := os.Stat(invitePath); err != nil {
+		t.Fatalf("pending invite should exist: %v", err)
+	}
+
+	// Revoke bob — should clean up the pending invite file
 	if err := mgr.Revoke("tv", "alice", "bob"); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
@@ -878,6 +874,35 @@ func TestDestroyConcurrentWithAccept(t *testing.T) {
 		mgr.Accept("tv", "bob", token, bobAg, bobPub)
 	}()
 	wg.Wait()
+}
+
+func TestInviteDuplicateRejected(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// First invite should succeed
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+	if token == "" {
+		t.Fatal("first invite token should not be empty")
+	}
+
+	// Second invite for same user should fail
+	_, err = mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err == nil {
+		t.Error("expected error on duplicate invite")
+	}
+	if !strings.Contains(err.Error(), "pending invite") {
+		t.Errorf("error = %q, want mention of pending invite", err)
+	}
 }
 
 func TestAcceptRejectsExistingMember(t *testing.T) {
