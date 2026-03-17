@@ -276,6 +276,20 @@ func TestDefault_InviteTTLFields(t *testing.T) {
 	}
 }
 
+func TestLoadEnv_ServerSecretClearedFromEnv(t *testing.T) {
+	t.Setenv("KEYHOLE_SERVER_SECRET", "test-secret-value-that-is-long-enough-for-the-minimum-length-check-ok")
+
+	cfg := LoadEnv()
+	if cfg.ServerSecret == "" {
+		t.Fatal("expected server secret to be loaded")
+	}
+
+	// The environment variable should be cleared after loading
+	if val := os.Getenv("KEYHOLE_SERVER_SECRET"); val != "" {
+		t.Errorf("KEYHOLE_SERVER_SECRET still set in environment after LoadEnv: %q", val)
+	}
+}
+
 func TestParseAdmins(t *testing.T) {
 	tests := []struct {
 		input string

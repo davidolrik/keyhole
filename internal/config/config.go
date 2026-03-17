@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,11 +53,22 @@ func LoadFile(path string) (*Config, error) {
 
 // LoadEnv reads KEYHOLE_* environment variables into a Config.
 // Unset variables result in zero values.
+//
+// SECURITY: KEYHOLE_SERVER_SECRET via environment is discouraged —
+// environment variables are visible through /proc, ps, and are
+// inherited by child processes. Prefer storing the server secret
+// in a file with 0600 permissions (either in the config file or
+// the auto-generated server_secret file in the data directory).
 func LoadEnv() Config {
 	var cfg Config
 	cfg.Listen = os.Getenv("KEYHOLE_LISTEN")
 	cfg.DataDir = os.Getenv("KEYHOLE_DATA_DIR")
 	cfg.ServerSecret = os.Getenv("KEYHOLE_SERVER_SECRET")
+	if cfg.ServerSecret != "" {
+		// Clear the environment variable to reduce the exposure window.
+		os.Unsetenv("KEYHOLE_SERVER_SECRET")
+		log.Printf("WARNING: server secret loaded from KEYHOLE_SERVER_SECRET environment variable; prefer using a config file or server_secret file with 0600 permissions")
+	}
 	cfg.InviteCodeTTL = os.Getenv("KEYHOLE_INVITE_CODE_TTL")
 	cfg.ConsumedInviteRetention = os.Getenv("KEYHOLE_CONSUMED_INVITE_RETENTION")
 	if admins := os.Getenv("KEYHOLE_ADMINS"); admins != "" {
