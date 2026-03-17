@@ -211,6 +211,12 @@ func (s *FileStore) DeleteVault(vault string) error {
 	return os.RemoveAll(vaultPath)
 }
 
+// VaultDirExists reports whether the vault directory exists on disk.
+func (s *FileStore) VaultDirExists(vault string) bool {
+	info, err := os.Lstat(s.vaultDir(vault))
+	return err == nil && info.IsDir()
+}
+
 func (s *FileStore) vaultDir(vault string) string {
 	return filepath.Join(s.dataDir, "vaults", vault)
 }

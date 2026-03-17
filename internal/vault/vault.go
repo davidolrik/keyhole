@@ -95,8 +95,13 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 	m.lockVault(name)
 	defer m.unlockVault(name)
 
-	// Check vault doesn't already exist
+	// Check vault doesn't already exist by verifying both meta.json and the
+	// vault directory itself — a partial creation or manual tampering could
+	// leave a directory without meta.json.
 	if _, err := m.store.ReadVaultMeta(name); err == nil {
+		return fmt.Errorf("vault %q already exists", name)
+	}
+	if m.store.VaultDirExists(name) {
 		return fmt.Errorf("vault %q already exists", name)
 	}
 
