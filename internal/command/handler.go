@@ -243,6 +243,7 @@ func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh
 	if err != nil {
 		return fmt.Errorf("vault key: %w", err)
 	}
+	defer crypto.Zeroize(vaultKey)
 
 	ciphertext, err := h.fileStore.ReadVaultSecret(vaultName, path)
 	if err != nil {
@@ -289,11 +290,13 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 	if err != nil {
 		return fmt.Errorf("vault key: %w", err)
 	}
+	defer crypto.Zeroize(vaultKey)
 
 	secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, path, h.serverSecret)
 	if err != nil {
 		return fmt.Errorf("derive secret key: %w", err)
 	}
+	defer crypto.Zeroize(secretKey)
 
 	ciphertext, err := crypto.EncryptWithKey(secretKey, plaintext)
 	if err != nil {
@@ -536,6 +539,7 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		if err != nil {
 			return fmt.Errorf("source vault key: %w", err)
 		}
+		defer crypto.Zeroize(vaultKey)
 		ciphertext, err := h.fileStore.ReadVaultSecret(cmd.Vault, cmd.Path)
 		if err != nil {
 			return fmt.Errorf("read source: %w", err)
@@ -600,10 +604,12 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		if err != nil {
 			return fmt.Errorf("destination vault key: %w", err)
 		}
+		defer crypto.Zeroize(vaultKey)
 		secretKey, err := crypto.DeriveVaultSecretKey(vaultKey, cmd.TargetPath, h.serverSecret)
 		if err != nil {
 			return fmt.Errorf("derive destination key: %w", err)
 		}
+		defer crypto.Zeroize(secretKey)
 		ciphertext, err := crypto.EncryptWithKey(secretKey, plaintext)
 		if err != nil {
 			return fmt.Errorf("encrypt destination: %w", err)

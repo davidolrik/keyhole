@@ -103,6 +103,7 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 	if _, err := io.ReadFull(rand.Reader, vaultKey); err != nil {
 		return fmt.Errorf("generate vault key: %w", err)
 	}
+	defer crypto.Zeroize(vaultKey)
 
 	// Wrap vault key for the owner
 	wrappedKey, err := m.wrapVaultKey(vaultKey, username, name, ag, pubKey)
@@ -346,6 +347,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 			return fmt.Errorf("decrypt vault key with token: %w", err)
 		}
 	}
+	defer crypto.Zeroize(vaultKey)
 
 	// Check readErr after performing equivalent cryptographic work above,
 	// so that a missing invite is indistinguishable from a wrong token.
