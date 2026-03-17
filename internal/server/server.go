@@ -152,7 +152,11 @@ func New(cfg Config) (*Server, error) {
 // AddUserKey writes a public key to the user's authorized_keys file.
 // Used for bootstrapping the first admin and for testing.
 func (s *Server) AddUserKey(username string, pubKey gossh.PublicKey) error {
-	sshDir := filepath.Join(s.cfg.DataDir, username, ".ssh")
+	userDir := filepath.Join(s.cfg.DataDir, username)
+	if isSymlink(userDir) {
+		return fmt.Errorf("symlink detected at user directory for %q", username)
+	}
+	sshDir := filepath.Join(userDir, ".ssh")
 	if isSymlink(sshDir) {
 		return fmt.Errorf("symlink detected at .ssh directory for %q", username)
 	}
@@ -230,7 +234,7 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	// when it matches. Unregistered users and wrong-key users both get
 	// through auth identically — the session handler enforces access.
 	authKeysPath := filepath.Join(s.cfg.DataDir, username, ".ssh", "authorized_keys")
-	if isSymlink(filepath.Join(s.cfg.DataDir, username, ".ssh")) || isSymlink(authKeysPath) {
+	if isSymlink(filepath.Join(s.cfg.DataDir, username)) || isSymlink(filepath.Join(s.cfg.DataDir, username, ".ssh")) || isSymlink(authKeysPath) {
 		log.Printf("auth: symlink detected in authorized_keys path for %q", username)
 		s.auditLog.AuthDenied(username, remote, "symlink detected in authorized_keys path")
 		return false

@@ -1719,6 +1719,71 @@ func TestSymlinkedAuthorizedKeysRejected(t *testing.T) {
 	}
 }
 
+func TestSymlinkedUserDirectoryRejected(t *testing.T) {
+	dataDir := testDataDir(t)
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{DataDir: dataDir, Admins: []string{"alice"}}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Set up alice's key normally first
+	if err := srv.AddUserKey("alice", alice.sshPub); err != nil {
+		t.Fatalf("AddUserKey: %v", err)
+	}
+
+	// Move alice's directory and replace it with a symlink
+	realDir := filepath.Join(dataDir, "alice_real")
+	if err := os.Rename(filepath.Join(dataDir, "alice"), realDir); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if err := os.Symlink(realDir, filepath.Join(dataDir, "alice")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	// Alice should not be able to run commands (symlink detected at user directory)
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "help")
+	if err == nil {
+		t.Error("expected error when user directory is a symlink")
+	}
+}
+
+func TestAddUserKeyRejectsSymlinkedUserDirectory(t *testing.T) {
+	dataDir := testDataDir(t)
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{DataDir: dataDir}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Create a real directory and symlink the user directory to it
+	realDir := filepath.Join(dataDir, "alice_real")
+	if err := os.MkdirAll(realDir, 0700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.Symlink(realDir, filepath.Join(dataDir, "alice")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	err = srv.AddUserKey("alice", alice.sshPub)
+	if err == nil {
+		t.Error("expected error when user directory is a symlink")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("error = %q, expected to mention symlink", err)
+	}
+}
+
 func TestSanitizeErrorStripsInternalDetails(t *testing.T) {
 	// sanitizeError is tested indirectly — errors returned by handler.Handle
 	// go through sanitizeError in sessionHandler before reaching the client.
