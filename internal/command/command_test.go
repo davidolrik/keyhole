@@ -129,6 +129,31 @@ func TestParse(t *testing.T) {
 			argv:    []string{"invite", "extra"},
 			wantErr: true,
 		},
+		{
+			name:    "register with path traversal invite code",
+			argv:    []string{"register", "../../../etc/passwd"},
+			wantErr: true,
+		},
+		{
+			name:    "register with slash in invite code",
+			argv:    []string{"register", "kh_abc/def"},
+			wantErr: true,
+		},
+		{
+			name:    "register with null byte in invite code",
+			argv:    []string{"register", "kh_abc\x00def"},
+			wantErr: true,
+		},
+		{
+			name:    "register with backslash in invite code",
+			argv:    []string{"register", "kh_abc\\def"},
+			wantErr: true,
+		},
+		{
+			name: "register with valid invite code",
+			argv: []string{"register", "kh_aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"},
+			want: command.Command{Op: command.OpRegister, InviteCode: "kh_aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"},
+		},
 	}
 
 	for _, tt := range tests {

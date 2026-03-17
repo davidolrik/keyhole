@@ -130,6 +130,9 @@ func Parse(argv []string) (Command, error) {
 		if len(args) != 1 {
 			return Command{}, fmt.Errorf("register requires exactly one invite code argument")
 		}
+		if err := validateInviteCode(args[0]); err != nil {
+			return Command{}, err
+		}
 		return Command{Op: OpRegister, InviteCode: args[0]}, nil
 
 	case "vault":
@@ -376,4 +379,14 @@ func sanitizePath(p string) (string, error) {
 		}
 	}
 	return cleaned, nil
+}
+
+// validateInviteCode rejects invite codes containing path-unsafe characters.
+func validateInviteCode(code string) error {
+	for _, c := range code {
+		if c == '/' || c == '\\' || c == '.' || c == '\x00' {
+			return fmt.Errorf("invite code contains invalid character")
+		}
+	}
+	return nil
 }
