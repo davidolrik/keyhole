@@ -285,25 +285,30 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) error {
 	m.lockVault(name)
 	defer m.unlockVault(name)
-	// Read the pending invite
+	// Read the pending invite. On failure, perform equivalent work to the
+	// expiration/token check below so that "no invite" and "wrong token"
+	// take similar time, preventing timing side-channels that reveal
+	// whether a pending invite exists.
 	inviteData, err := m.store.ReadPendingInvite(name, username)
 	if err != nil {
-		return fmt.Errorf("read pending invite: %w", err)
+		time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
+		hex.DecodeString(token)
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 
 	var invite pendingInvite
 	if err := json.Unmarshal(inviteData, &invite); err != nil {
-		return fmt.Errorf("unmarshal pending invite: %w", err)
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 
 	// Check if the invite has expired
 	created, err := time.Parse(time.RFC3339, invite.Created)
 	if err != nil {
-		return fmt.Errorf("parse invite timestamp: %w", err)
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 	if time.Since(created) > vaultInviteTTL {
 		m.store.DeletePendingInvite(name, username)
-		return fmt.Errorf("vault invite has expired")
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 
 	wrappedWithToken := invite.WrappedKey
