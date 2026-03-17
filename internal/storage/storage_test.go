@@ -180,6 +180,60 @@ func TestFileStore_WriteRejectsSymlinkTarget(t *testing.T) {
 	}
 }
 
+func TestFileStore_Delete(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	if err := store.Write("alice", "account/github", []byte("data")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if err := store.Delete("alice", "account/github"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	_, err := store.Read("alice", "account/github")
+	if !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Read after delete = %v, want ErrNotFound", err)
+	}
+}
+
+func TestFileStore_DeleteNotFound(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	err := store.Delete("alice", "nonexistent")
+	if !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Delete nonexistent = %v, want ErrNotFound", err)
+	}
+}
+
+func TestFileStore_DeleteRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Write a real secret, then create a symlink
+	if err := store.Write("alice", "real", []byte("data")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	realPath := filepath.Join(dir, "alice", "account", "real.enc")
+	linkPath := filepath.Join(dir, "alice", "account", "linked.enc")
+	if err := os.Symlink(realPath, linkPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	err := store.Delete("alice", "linked")
+	if err == nil {
+		t.Fatal("Delete through symlink should fail")
+	}
+
+	// Original file should still exist
+	if _, err := store.Read("alice", "real"); err != nil {
+		t.Errorf("original file should still exist: %v", err)
+	}
+}
+
 func TestFileStore_ListEmpty(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)

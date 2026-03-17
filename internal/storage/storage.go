@@ -16,6 +16,7 @@ var ErrNotFound = errors.New("secret not found")
 type Store interface {
 	Write(username, path string, ciphertext []byte) error
 	Read(username, path string) ([]byte, error)
+	Delete(username, path string) error
 	List(username, prefix string) ([]string, error)
 }
 
@@ -57,6 +58,19 @@ func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+// Delete removes a secret for the given username and path.
+func (s *FileStore) Delete(username, secretPath string) error {
+	fpath := s.filePath(username, secretPath)
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
+	err := os.Remove(fpath)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return ErrNotFound
+	}
+	return err
 }
 
 // isSymlink reports whether path is a symbolic link.

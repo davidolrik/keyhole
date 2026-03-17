@@ -628,13 +628,7 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 			return fmt.Errorf("secret copied to destination but source could not be deleted: %w", err)
 		}
 	} else {
-		// For personal vault, we don't have a Delete method on the Store interface.
-		// Delete the file directly after checking for symlinks.
-		srcFile := filepath.Join(h.dataDir, username, "account", filepath.FromSlash(cmd.Path)+".enc")
-		if info, err := os.Lstat(srcFile); err == nil && info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symlink detected in source path")
-		}
-		if err := os.Remove(srcFile); err != nil {
+		if err := h.store.Delete(username, cmd.Path); err != nil {
 			return fmt.Errorf("secret copied to destination but source could not be deleted: %w", err)
 		}
 	}
