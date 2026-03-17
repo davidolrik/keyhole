@@ -96,6 +96,8 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 
+	cleanupExpiredInvites(cfg.DataDir)
+
 	readLineTimeout := cfg.ReadLineTimeout
 	if readLineTimeout == 0 {
 		readLineTimeout = defaultReadLineTimeout
@@ -504,4 +506,31 @@ func generateAlphanumericSecret(length int) (string, error) {
 		b[i] = alphanumeric[idx.Int64()]
 	}
 	return string(b), nil
+}
+
+const inviteCodeTTL = 72 * time.Hour
+
+// cleanupExpiredInvites removes invite code files older than the invite TTL.
+// Called once at startup to prevent unbounded accumulation of expired invites.
+func cleanupExpiredInvites(dataDir string) {
+	inviteDir := filepath.Join(dataDir, "invites")
+	entries, err := os.ReadDir(inviteDir)
+	if err != nil {
+		return // directory may not exist yet
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if time.Since(info.ModTime()) > inviteCodeTTL {
+			invitePath := filepath.Join(inviteDir, e.Name())
+			if err := os.Remove(invitePath); err != nil {
+				log.Printf("WARNING: failed to remove expired invite %s: %v", invitePath, err)
+			}
+		}
+	}
 }

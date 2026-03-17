@@ -1784,6 +1784,49 @@ func TestAddUserKeyRejectsSymlinkedUserDirectory(t *testing.T) {
 	}
 }
 
+func TestCleanupExpiredInvitesOnStartup(t *testing.T) {
+	dataDir := testDataDir(t)
+
+	// Create invites directory with expired and valid invite files
+	inviteDir := filepath.Join(dataDir, "invites")
+	if err := os.MkdirAll(inviteDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a "valid" invite file (recent modification time)
+	validPath := filepath.Join(inviteDir, "kh_valid")
+	if err := os.WriteFile(validPath, []byte("2026-03-17T00:00:00Z"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an "expired" invite file and backdate its modification time
+	expiredPath := filepath.Join(inviteDir, "kh_expired")
+	if err := os.WriteFile(expiredPath, []byte("2026-03-10T00:00:00Z"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().Add(-96 * time.Hour)
+	if err := os.Chtimes(expiredPath, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	// Starting the server should clean up expired invites
+	cfg := server.Config{DataDir: dataDir}
+	_, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Expired invite should be removed
+	if _, err := os.Stat(expiredPath); !os.IsNotExist(err) {
+		t.Error("expired invite should be removed on startup")
+	}
+
+	// Valid invite should remain
+	if _, err := os.Stat(validPath); err != nil {
+		t.Error("valid invite should not be removed on startup")
+	}
+}
+
 func TestSanitizeErrorStripsInternalDetails(t *testing.T) {
 	// sanitizeError is tested indirectly — errors returned by handler.Handle
 	// go through sanitizeError in sessionHandler before reaching the client.
