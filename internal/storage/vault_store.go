@@ -99,12 +99,18 @@ func (s *FileStore) WriteVaultMeta(vault string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, data, 0600)
 }
 
 // ReadVaultMeta reads the vault metadata.
 func (s *FileStore) ReadVaultMeta(vault string) ([]byte, error) {
 	fpath := filepath.Join(s.vaultDir(vault), "meta.json")
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -121,12 +127,18 @@ func (s *FileStore) WriteVaultMembers(vault string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, data, 0600)
 }
 
 // ReadVaultMembers reads the vault members file.
 func (s *FileStore) ReadVaultMembers(vault string) ([]byte, error) {
 	fpath := filepath.Join(s.vaultDir(vault), "members.json")
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -143,12 +155,18 @@ func (s *FileStore) WriteVaultKey(vault, username string, wrappedKey []byte) err
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, wrappedKey, 0600)
 }
 
 // ReadVaultKey reads a user's wrapped vault key.
 func (s *FileStore) ReadVaultKey(vault, username string) ([]byte, error) {
 	fpath := s.vaultKeyPath(vault, username)
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -162,6 +180,9 @@ func (s *FileStore) ReadVaultKey(vault, username string) ([]byte, error) {
 // DeleteVaultKey removes a user's wrapped vault key.
 func (s *FileStore) DeleteVaultKey(vault, username string) error {
 	fpath := s.vaultKeyPath(vault, username)
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	err := os.Remove(fpath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return ErrNotFound
@@ -175,12 +196,18 @@ func (s *FileStore) WritePendingInvite(vault, username string, data []byte) erro
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, data, 0600)
 }
 
 // ReadPendingInvite reads a pending invite for a user.
 func (s *FileStore) ReadPendingInvite(vault, username string) ([]byte, error) {
 	fpath := s.pendingInvitePath(vault, username)
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -194,6 +221,9 @@ func (s *FileStore) ReadPendingInvite(vault, username string) ([]byte, error) {
 // DeletePendingInvite removes a pending invite.
 func (s *FileStore) DeletePendingInvite(vault, username string) error {
 	fpath := s.pendingInvitePath(vault, username)
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	err := os.Remove(fpath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return ErrNotFound
