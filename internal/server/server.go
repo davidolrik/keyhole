@@ -376,6 +376,7 @@ func resolveServerSecret(configValue []byte, path string) ([]byte, error) {
 	if len(configValue) != 0 {
 		secret := make([]byte, len(configValue))
 		copy(secret, configValue)
+		crypto.Zeroize(configValue)
 		if len(secret) < minServerSecretLength {
 			return nil, fmt.Errorf("server secret must be at least %d characters", minServerSecretLength)
 		}
