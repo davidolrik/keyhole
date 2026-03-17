@@ -219,6 +219,8 @@ func (m *Manager) ListVaults(username string) ([]string, error) {
 // Invite generates a pending invite for targetUser on the vault.
 // The inviter must be an owner or admin. Returns an invite token.
 func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgent, pubKey ssh.PublicKey) (string, error) {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	members, err := m.Members(name)
 	if err != nil {
 		return "", fmt.Errorf("read members: %w", err)
