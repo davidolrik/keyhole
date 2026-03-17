@@ -489,6 +489,8 @@ func (m *Manager) Revoke(name, revoker, targetUser string) error {
 
 // Destroy permanently deletes a vault. Only the vault owner can do this.
 func (m *Manager) Destroy(name, username string) error {
+	m.lockVault(name)
+	defer m.unlockVault(name)
 	data, err := m.store.ReadVaultMeta(name)
 	if err != nil {
 		return fmt.Errorf("read vault meta: %w", err)

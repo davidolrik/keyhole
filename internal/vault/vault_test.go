@@ -804,6 +804,82 @@ func TestRevokeDeletesPendingInviteBeforeAccept(t *testing.T) {
 	}
 }
 
+func TestDestroy(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	ag, pubKey := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", ag, pubKey); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Owner can destroy
+	if err := mgr.Destroy("tv", "alice"); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	// Vault should no longer exist
+	if mgr.HasAccess("tv", "alice") {
+		t.Error("vault should not exist after destroy")
+	}
+}
+
+func TestDestroyNonOwnerFails(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+
+	err := mgr.Destroy("tv", "bob")
+	if err == nil {
+		t.Error("expected error when non-owner destroys vault")
+	}
+
+	// Vault should still exist
+	if !mgr.HasAccess("tv", "alice") {
+		t.Error("vault should still exist after failed destroy")
+	}
+}
+
+func TestDestroyConcurrentWithAccept(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+
+	// Run destroy and accept concurrently — no panics or data races
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		mgr.Destroy("tv", "alice")
+	}()
+	go func() {
+		defer wg.Done()
+		mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	}()
+	wg.Wait()
+}
+
 func TestRevokeNonMemberFails(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)
