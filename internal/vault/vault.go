@@ -322,7 +322,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 	// Derive the token key and decrypt the vault key
 	tokenRaw, err := hex.DecodeString(token)
 	if err != nil {
-		return fmt.Errorf("invalid invite token: %w", err)
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 
 	tokenKey, err := deriveTokenKey(tokenRaw, m.serverSecret, name, username)
