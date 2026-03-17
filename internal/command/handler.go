@@ -692,6 +692,7 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		// "file not found" and "file found but expired" take similar time,
 		// preventing timing side-channels that reveal code existence.
 		time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
+		os.Remove(invitePath) // no-op on non-existent file; matches expired-path work
 		return fmt.Errorf("invalid or expired invite code")
 	}
 	if len(inviteData) > 0 {
