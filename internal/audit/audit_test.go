@@ -256,6 +256,38 @@ func TestLogRotationOnStartup(t *testing.T) {
 	}
 }
 
+func TestLogRotationErrorReturned(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "audit.log")
+
+	// Create a log file larger than the rotation threshold
+	f, err := os.Create(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 1024*1024)
+	for i := 0; i < 11; i++ {
+		if _, err := f.Write(chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.Close()
+
+	// Create audit.log.1 as a directory so os.Rename fails
+	rotatedPath := logPath + ".1"
+	if err := os.Mkdir(rotatedPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Put a file inside so the directory isn't empty (can't be overwritten by rename)
+	os.WriteFile(filepath.Join(rotatedPath, "blocker"), []byte("x"), 0600)
+
+	// NewLogger should return an error because rotation failed
+	_, err = audit.NewLogger(dir)
+	if err == nil {
+		t.Fatal("expected error when rotation fails")
+	}
+}
+
 // lastEntry returns the last log entry parsed from the audit log.
 func lastEntry(t *testing.T, path string) logEntry {
 	t.Helper()

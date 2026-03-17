@@ -2,6 +2,7 @@ package audit
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -23,7 +24,10 @@ func NewLogger(dataDir string) (*Logger, error) {
 
 	// Rotate if the log has grown too large.
 	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
-		os.Rename(path, path+".1")
+		if err := os.Rename(path, path+".1"); err != nil {
+			log.Printf("WARNING: audit log rotation failed: %v", err)
+			return nil, fmt.Errorf("audit log rotation failed: %w", err)
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
