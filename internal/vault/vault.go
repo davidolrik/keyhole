@@ -514,14 +514,16 @@ func (m *Manager) Revoke(name, revoker, targetUser string) error {
 		return fmt.Errorf("write members: %w", err)
 	}
 
-	// Delete the user's wrapped vault key
-	if err := m.store.DeleteVaultKey(name, targetUser); err != nil {
-		// Non-fatal: key may not exist (e.g. pending invite that was never accepted)
+	// Delete the user's wrapped vault key (may not exist if invite was never accepted)
+	if err := m.store.DeleteVaultKey(name, targetUser); err != nil && err != storage.ErrNotFound {
+		log.Printf("warning: failed to delete vault key for %s in vault %s: %v", targetUser, name, err)
 	}
 
 	// Clean up any pending invite to prevent a revoked user from rejoining
 	// via a stale invite token.
-	m.store.DeletePendingInvite(name, targetUser)
+	if err := m.store.DeletePendingInvite(name, targetUser); err != nil && err != storage.ErrNotFound {
+		return fmt.Errorf("revoked membership but failed to delete pending invite: %w", err)
+	}
 
 	return nil
 }
