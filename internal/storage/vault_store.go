@@ -200,7 +200,7 @@ func (s *FileStore) ListVaults() ([]string, error) {
 			continue
 		}
 		metaPath := filepath.Join(vaultsDir, e.Name(), "meta.json")
-		if _, err := os.Stat(metaPath); err == nil {
+		if _, err := os.Lstat(metaPath); err == nil {
 			vaults = append(vaults, e.Name())
 		}
 	}
