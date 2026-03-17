@@ -157,26 +157,26 @@ func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey
 
 	vaultKey, err := crypto.DecryptWithKey(wrappingKey, wrappedKey)
 	if err == nil {
-		zeroize(wrappingKey)
+		crypto.Zeroize(wrappingKey)
 		return vaultKey, nil
 	}
 
 	// Fall back to legacy (nil-salt) wrapping key
 	legacyKey, keyErr := m.deriveWrappingKeyLegacy(username, name, ag, pubKey)
 	if keyErr != nil {
-		zeroize(wrappingKey)
+		crypto.Zeroize(wrappingKey)
 		return nil, fmt.Errorf("unwrap vault key: %w", err)
 	}
 	vaultKey, legacyErr := crypto.DecryptWithKey(legacyKey, wrappedKey)
-	zeroize(legacyKey)
+	crypto.Zeroize(legacyKey)
 	if legacyErr != nil {
-		zeroize(wrappingKey)
+		crypto.Zeroize(wrappingKey)
 		return nil, fmt.Errorf("unwrap vault key: %w", err)
 	}
 
 	// Re-wrap with salted wrapping key
 	newWrapped, encErr := crypto.EncryptWithKey(wrappingKey, vaultKey)
-	zeroize(wrappingKey)
+	crypto.Zeroize(wrappingKey)
 	if encErr == nil {
 		m.store.WriteVaultKey(name, username, newWrapped)
 	}
@@ -266,7 +266,7 @@ func (m *Manager) Invite(name, inviter, targetUser string, ag agent.ExtendedAgen
 		return "", fmt.Errorf("derive token key: %w", err)
 	}
 	wrappedWithToken, err := crypto.EncryptWithKey(tokenKey, vaultKey)
-	zeroize(tokenKey)
+	crypto.Zeroize(tokenKey)
 	if err != nil {
 		return "", fmt.Errorf("wrap vault key with token: %w", err)
 	}
@@ -332,7 +332,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		return fmt.Errorf("derive token key: %w", err)
 	}
 	vaultKey, err := crypto.DecryptWithKey(tokenKey, wrappedWithToken)
-	zeroize(tokenKey)
+	crypto.Zeroize(tokenKey)
 	if err != nil {
 		// Fall back to legacy (nil-salt) token key derivation
 		legacyKey, keyErr := deriveTokenKeyWithSalt(tokenRaw, nil, name, username)
@@ -340,7 +340,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 			return fmt.Errorf("decrypt vault key with token: %w", err)
 		}
 		vaultKey, err = crypto.DecryptWithKey(legacyKey, wrappedWithToken)
-		zeroize(legacyKey)
+		crypto.Zeroize(legacyKey)
 		if err != nil {
 			return fmt.Errorf("decrypt vault key with token: %w", err)
 		}
@@ -545,7 +545,7 @@ func (m *Manager) wrapVaultKey(vaultKey []byte, username, vaultName string, ag a
 	if err != nil {
 		return nil, err
 	}
-	defer zeroize(wrappingKey)
+	defer crypto.Zeroize(wrappingKey)
 	return crypto.EncryptWithKey(wrappingKey, vaultKey)
 }
 
@@ -589,12 +589,6 @@ func buildChallenge(serverSecret []byte, username, path string) []byte {
 	return h.Sum(nil)
 }
 
-// zeroize overwrites a byte slice with zeros to limit key material lifetime.
-func zeroize(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
-}
 
 // ValidateVaultName checks that a vault name is safe and not reserved.
 func ValidateVaultName(name string) error {

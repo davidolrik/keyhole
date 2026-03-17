@@ -849,20 +849,20 @@ func decryptVaultSecret(vaultKey []byte, path string, serverSecret, ciphertext [
 	}
 	plaintext, err := crypto.DecryptWithKey(secretKey, ciphertext)
 	if err == nil {
-		zeroize(secretKey)
+		crypto.Zeroize(secretKey)
 		return plaintext, nil
 	}
 
 	// Fall back to legacy (nil-salt) derivation
 	legacyKey, keyErr := crypto.DeriveVaultSecretKeyLegacy(vaultKey, path)
 	if keyErr != nil {
-		zeroize(secretKey)
+		crypto.Zeroize(secretKey)
 		return nil, err
 	}
 	plaintext, legacyErr := crypto.DecryptWithKey(legacyKey, ciphertext)
-	zeroize(legacyKey)
+	crypto.Zeroize(legacyKey)
 	if legacyErr != nil {
-		zeroize(secretKey)
+		crypto.Zeroize(secretKey)
 		return nil, err
 	}
 
@@ -873,7 +873,7 @@ func decryptVaultSecret(vaultKey []byte, path string, serverSecret, ciphertext [
 			writeback(newCiphertext)
 		}
 	}
-	zeroize(secretKey)
+	crypto.Zeroize(secretKey)
 
 	return plaintext, nil
 }
@@ -1030,13 +1030,6 @@ func writeAuthorizedKeysExclusive(path string, data []byte) error {
 		return writeErr
 	}
 	return closeErr
-}
-
-// zeroize overwrites a byte slice with zeros to limit key material lifetime.
-func zeroize(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
 }
 
 // generateInviteCode generates a cryptographically random invite code.

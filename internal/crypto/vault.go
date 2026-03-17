@@ -11,9 +11,9 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// zeroize overwrites a byte slice with zeros to prevent key material from
+// Zeroize overwrites a byte slice with zeros to prevent key material from
 // lingering in memory longer than necessary.
-func zeroize(b []byte) {
+func Zeroize(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
