@@ -29,6 +29,13 @@ func LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// Check permissions before reading so that sensitive values (e.g.
+	// server_secret) are never loaded from a world-readable file.
+	mode := info.Mode().Perm()
+	if mode&0077 != 0 {
+		return nil, fmt.Errorf("config file %s has permission %04o; must not be group- or world-readable (try: chmod 600 %s)", path, mode, path)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -36,11 +43,6 @@ func LoadFile(path string) (*Config, error) {
 	var cfg Config
 	if err := hclsimple.Decode(path, data, nil, &cfg); err != nil {
 		return nil, err
-	}
-
-	mode := info.Mode().Perm()
-	if mode&0077 != 0 {
-		return nil, fmt.Errorf("config file %s has permission %04o; must not be group- or world-readable (try: chmod 600 %s)", path, mode, path)
 	}
 
 	return &cfg, nil
