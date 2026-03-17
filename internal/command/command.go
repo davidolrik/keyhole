@@ -340,6 +340,10 @@ func parseMoveCommand(args []string) (Command, error) {
 		return Command{}, fmt.Errorf("destination: %w", err)
 	}
 
+	if srcVault == dstVault && srcPath == dstPath {
+		return Command{}, fmt.Errorf("source and destination are the same")
+	}
+
 	return Command{
 		Op:          OpMove,
 		Vault:       srcVault,
