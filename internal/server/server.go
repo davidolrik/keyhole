@@ -181,6 +181,11 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		// to prevent bypass via addresses that fail to parse.
 		ip = remote
 	}
+	// Strip IPv6 zone identifiers (e.g. "%eth0") to prevent bypass via
+	// different zone suffixes from the same address.
+	if idx := strings.Index(ip, "%"); idx >= 0 {
+		ip = ip[:idx]
+	}
 	if !s.connLimiter.allow(ip) {
 		s.auditLog.AuthDenied(username, remote, "rate limited")
 		return false
