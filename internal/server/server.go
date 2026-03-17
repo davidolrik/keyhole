@@ -315,7 +315,10 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 			return nil, err
 		}
 		log.Printf("WARNING: generating new server secret at %s — back it up! Losing it makes all secrets unrecoverable.", path)
-		secret := generateAlphanumericSecret(serverSecretLength)
+		secret, err := generateAlphanumericSecret(serverSecretLength)
+		if err != nil {
+			return nil, fmt.Errorf("generate server secret: %w", err)
+		}
 		if err := os.WriteFile(path, []byte(secret), 0600); err != nil {
 			return nil, fmt.Errorf("write server secret: %w", err)
 		}
@@ -326,11 +329,14 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 }
 
 // generateAlphanumericSecret returns a cryptographically random alphanumeric string of the given length.
-func generateAlphanumericSecret(length int) string {
+func generateAlphanumericSecret(length int) (string, error) {
 	b := make([]byte, length)
 	for i := range b {
-		idx, _ := rand.Int(rand.Reader, big.NewInt(int64(len(alphanumeric))))
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphanumeric))))
+		if err != nil {
+			return "", fmt.Errorf("crypto/rand: %w", err)
+		}
 		b[i] = alphanumeric[idx.Int64()]
 	}
-	return string(b)
+	return string(b), nil
 }
