@@ -132,10 +132,16 @@ func New(cfg Config) (*Server, error) {
 // Used for bootstrapping the first admin and for testing.
 func (s *Server) AddUserKey(username string, pubKey gossh.PublicKey) error {
 	sshDir := filepath.Join(s.cfg.DataDir, username, ".ssh")
+	if isSymlink(sshDir) {
+		return fmt.Errorf("symlink detected at .ssh directory for %q", username)
+	}
 	if err := os.MkdirAll(sshDir, 0700); err != nil {
 		return fmt.Errorf("create ssh dir: %w", err)
 	}
 	authKeysPath := filepath.Join(sshDir, "authorized_keys")
+	if isSymlink(authKeysPath) {
+		return fmt.Errorf("symlink detected at authorized_keys for %q", username)
+	}
 	line := gossh.MarshalAuthorizedKey(pubKey)
 	return os.WriteFile(authKeysPath, line, 0600)
 }
