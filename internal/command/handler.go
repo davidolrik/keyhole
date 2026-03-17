@@ -601,7 +601,7 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("username %q already exists", username)
 	}
 
-	// Validate and consume invite code
+	// Validate invite code exists
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
 	if _, err := os.Stat(invitePath); err != nil {
 		return fmt.Errorf("invalid or expired invite code")
@@ -626,6 +626,17 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 		return nil
 	}
 
+	// Atomically consume invite code: rename instead of stat+remove to prevent
+	// TOCTOU races where two concurrent registrations could both use the same code.
+	consumedDir := filepath.Join(h.dataDir, "invites", "consumed")
+	if err := os.MkdirAll(consumedDir, 0700); err != nil {
+		return fmt.Errorf("create consumed dir: %w", err)
+	}
+	consumedPath := filepath.Join(consumedDir, inviteCode)
+	if err := os.Rename(invitePath, consumedPath); err != nil {
+		return fmt.Errorf("invalid or expired invite code")
+	}
+
 	// Create authorized_keys
 	sshDir := filepath.Join(h.dataDir, username, ".ssh")
 	if err := os.MkdirAll(sshDir, 0700); err != nil {
@@ -633,12 +644,6 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	}
 	if err := os.WriteFile(authKeysPath, []byte(authorizedLine), 0600); err != nil {
 		return fmt.Errorf("write authorized_keys: %w", err)
-	}
-
-	// Consume invite code (remove the file)
-	if err := os.Remove(invitePath); err != nil {
-		// Non-fatal: log but don't fail registration
-		fmt.Fprintf(sess, "Warning: could not consume invite code: %v\n", err)
 	}
 
 	fmt.Fprintf(sess, "Registration successful. You can now connect as %s.\n", username)
