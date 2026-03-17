@@ -414,6 +414,12 @@ func (h *Handler) handleVaultAccept(sess ssh.Session, username string, pubKey go
 }
 
 func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targetUser string) error {
+	_, cleanup, err := requireAgent(sess)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	if err := h.vaultMgr.Promote(vaultName, username, targetUser); err != nil {
 		if h.auditLog != nil {
 			h.auditLog.VaultOpDenied("promote", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
@@ -429,6 +435,12 @@ func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targ
 }
 
 func (h *Handler) handleVaultDemote(sess ssh.Session, username, vaultName, targetUser string) error {
+	_, cleanup, err := requireAgent(sess)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	if err := h.vaultMgr.Demote(vaultName, username, targetUser); err != nil {
 		if h.auditLog != nil {
 			h.auditLog.VaultOpDenied("demote", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
@@ -444,6 +456,12 @@ func (h *Handler) handleVaultDemote(sess ssh.Session, username, vaultName, targe
 }
 
 func (h *Handler) handleVaultRevoke(sess ssh.Session, username, vaultName, targetUser string) error {
+	_, cleanup, err := requireAgent(sess)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	if err := h.vaultMgr.Revoke(vaultName, username, targetUser); err != nil {
 		if h.auditLog != nil {
 			h.auditLog.VaultOpDenied("revoke", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
