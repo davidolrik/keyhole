@@ -160,7 +160,12 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	remote := ctx.RemoteAddr().String()
 
 	// Rate limit per IP to prevent brute-force and DoS attacks.
-	ip, _, _ := net.SplitHostPort(remote)
+	ip, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		// Malformed address — use the raw remote string as the rate-limit key
+		// to prevent bypass via addresses that fail to parse.
+		ip = remote
+	}
 	if !s.connLimiter.allow(ip) {
 		s.auditLog.AuthDenied(username, remote, "rate limited")
 		return false
