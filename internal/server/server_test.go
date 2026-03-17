@@ -1655,3 +1655,55 @@ func TestHelpIncludesVaultCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestShortServerSecretRejected(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// 63 characters — one short of the 64-character minimum
+	secret63 := strings.Repeat("a", 63)
+	cfg := server.Config{
+		DataDir:      dataDir,
+		ServerSecret: secret63,
+	}
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected error for 63-character server secret")
+	}
+	if !strings.Contains(err.Error(), "at least 64") {
+		t.Errorf("error = %q, expected message about minimum 64 characters", err)
+	}
+}
+
+func TestValidServerSecretAccepted(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// Exactly 64 characters — meets the minimum
+	secret64 := strings.Repeat("a", 64)
+	cfg := server.Config{
+		DataDir:      dataDir,
+		ServerSecret: secret64,
+	}
+	_, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("64-character secret should be accepted, got: %v", err)
+	}
+}
+
+func TestEmptyServerSecretFileRejected(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// Write an empty server_secret file
+	secretPath := filepath.Join(dataDir, "server_secret")
+	if err := os.WriteFile(secretPath, []byte(""), 0600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	cfg := server.Config{DataDir: dataDir}
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected error for empty server secret file")
+	}
+	if !strings.Contains(err.Error(), "at least 64") {
+		t.Errorf("error = %q, expected message about minimum 64 characters", err)
+	}
+}

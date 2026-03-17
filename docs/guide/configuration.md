@@ -18,7 +18,7 @@ Configuration is resolved in precedence order: **defaults < config file < enviro
 | `KEYHOLE_LISTEN`        | Address to listen on                    |
 | `KEYHOLE_DATA_DIR`      | Data directory                          |
 | `KEYHOLE_ADMINS`        | Comma-separated list of admin usernames |
-| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret              |
+| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret (minimum 64 characters) |
 
 ## Config file (HCL)
 
@@ -28,5 +28,5 @@ By default, keyhole looks for `keyhole.hcl` inside the data directory. Override 
 listen        = ":2222"
 data_dir      = "/var/lib/keyhole"
 admins        = ["alice", "bob"]
-server_secret = "your-alphanumeric-secret"
+server_secret = "your-alphanumeric-secret"  # minimum 64 characters
 ```

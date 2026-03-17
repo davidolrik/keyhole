@@ -95,7 +95,7 @@ services:
 On first start keyhole generates and persists:
 
 - `host_key` — Ed25519 SSH host key (fingerprint logged on startup)
-- `server_secret` — 64-character alphanumeric string
+- `server_secret` — 64-character alphanumeric string (minimum 64 characters required; the server will refuse to start with a shorter secret)
 
 **Back up `server_secret`.** Losing it makes all stored secrets permanently unrecoverable.
 
@@ -114,12 +114,12 @@ Configuration is resolved in precedence order: **defaults < config file < enviro
 
 ### Environment variables
 
-| Variable          | Description                             |
-| ----------------- | --------------------------------------- |
-| `KEYHOLE_LISTEN`  | Address to listen on                    |
-| `KEYHOLE_DATA_DIR`| Data directory                          |
-| `KEYHOLE_ADMINS`  | Comma-separated list of admin usernames |
-| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret        |
+| Variable          | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `KEYHOLE_LISTEN`  | Address to listen on                                     |
+| `KEYHOLE_DATA_DIR`| Data directory                                           |
+| `KEYHOLE_ADMINS`  | Comma-separated list of admin usernames                  |
+| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret (minimum 64 characters) |
 
 ### Config file (HCL)
 
@@ -129,7 +129,7 @@ By default, keyhole looks for `keyhole.hcl` inside the data directory. Override 
 listen        = ":2222"
 data_dir      = "/var/lib/keyhole"
 admins        = ["alice", "bob"]
-server_secret = "your-alphanumeric-secret"
+server_secret = "your-alphanumeric-secret"  # minimum 64 characters
 ```
 
 ### Bootstrap the first admin
@@ -297,7 +297,7 @@ Host keys.example.com
 ```plain
 {data_dir}/
 ├── host_key                        # Ed25519 host key (PEM)
-├── server_secret                   # Server-side encryption factor (alphanumeric)
+├── server_secret                   # Server-side encryption factor (min 64 alphanumeric chars)
 ├── keyhole.hcl                     # Config file (optional)
 ├── audit.log                       # Structured audit log
 ├── invites/
@@ -346,7 +346,7 @@ The log is append-only and survives server restarts.
 - **No shell.** The server accepts only structured commands; there is no shell access.
 - **Vault key wrapping.** Vault keys are individually wrapped per member using their SSH agent signature, so revoking a member does not require re-encrypting all vault secrets.
 - **Two-phase vault invite.** Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, the vault key is re-wrapped with the member's agent key. Vault invites expire after 72 hours.
-- **Server secret backup.** Store `server_secret` somewhere safe and separate from the data directory. Without it, every stored secret is permanently inaccessible.
+- **Server secret backup.** Store `server_secret` somewhere safe and separate from the data directory. Without it, every stored secret is permanently inaccessible. The server secret must be at least 64 characters; the server will refuse to start with a shorter value.
 
 ## Requirements
 

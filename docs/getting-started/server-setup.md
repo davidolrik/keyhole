@@ -28,7 +28,7 @@ services:
 On first start keyhole generates and persists:
 
 - `host_key` — Ed25519 SSH host key (fingerprint logged on startup)
-- `server_secret` — 64-character alphanumeric string
+- `server_secret` — 64-character alphanumeric string (minimum 64 characters required; the server will refuse to start with a shorter secret)
 
 ::: warning
 **Back up `server_secret`.** Losing it makes all stored secrets permanently unrecoverable.

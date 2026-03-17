@@ -298,11 +298,17 @@ func loadOrGenerateHostKey(path string) (gossh.Signer, error) {
 	return signer, nil
 }
 
+const minServerSecretLength = 64
+
 // resolveServerSecret returns the server secret from the config value if provided,
 // otherwise falls back to loading or generating from a file.
 func resolveServerSecret(configValue, path string) ([]byte, error) {
 	if configValue != "" {
-		return []byte(strings.TrimSpace(configValue)), nil
+		secret := []byte(strings.TrimSpace(configValue))
+		if len(secret) < minServerSecretLength {
+			return nil, fmt.Errorf("server secret must be at least %d characters", minServerSecretLength)
+		}
+		return secret, nil
 	}
 	return loadOrGenerateServerSecret(path)
 }
@@ -325,7 +331,11 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 		return []byte(secret), nil
 	}
 
-	return []byte(strings.TrimSpace(string(data))), nil
+	secret := []byte(strings.TrimSpace(string(data)))
+	if len(secret) < minServerSecretLength {
+		return nil, fmt.Errorf("server secret in %s must be at least %d characters", path, minServerSecretLength)
+	}
+	return secret, nil
 }
 
 // generateAlphanumericSecret returns a cryptographically random alphanumeric string of the given length.

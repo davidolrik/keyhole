@@ -32,7 +32,9 @@ Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, t
 
 Both user invite codes and vault invite tokens expire after 72 hours. Expired invites are rejected. User invite codes are consumed atomically using a filesystem rename to prevent race conditions.
 
-## Server secret backup
+## Server secret
+
+The server secret must be at least 64 characters. The server will refuse to start with a shorter value. On first run, keyhole auto-generates a 64-character alphanumeric secret; if you provide your own via `KEYHOLE_SERVER_SECRET` or the config file, it must meet the same minimum length.
 
 ::: danger
 Store `server_secret` somewhere safe and separate from the data directory. Without it, every stored secret is permanently inaccessible.
