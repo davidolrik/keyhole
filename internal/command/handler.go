@@ -399,6 +399,9 @@ func (h *Handler) handleVaultAccept(sess ssh.Session, username string, pubKey go
 	defer cleanup()
 
 	if err := h.vaultMgr.Accept(vaultName, username, token, ag, pubKey); err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("accept", username, sess.RemoteAddr().String(), vaultName, err.Error())
+		}
 		return fmt.Errorf("vault accept: %w", err)
 	}
 
