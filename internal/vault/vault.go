@@ -295,11 +295,13 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 	// expiration/token check below so that "no invite" and "wrong token"
 	// take similar time, preventing timing side-channels that reveal
 	// whether a pending invite exists.
-	inviteData, err := m.store.ReadPendingInvite(name, username)
-	if err != nil {
-		time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
-		hex.DecodeString(token)
-		return fmt.Errorf("invalid or expired vault invite")
+	inviteData, readErr := m.store.ReadPendingInvite(name, username)
+	if readErr != nil {
+		// Use a dummy invite and run the full verification path so that
+		// "no invite" and "wrong token" take similar time, preventing
+		// timing side-channels that reveal whether a pending invite exists.
+		inviteData = []byte(`{"wrapped_key":"AA==","created":"` +
+			time.Now().UTC().Format(time.RFC3339) + `"}`)
 	}
 
 	var invite pendingInvite
@@ -342,6 +344,12 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		if err != nil {
 			return fmt.Errorf("decrypt vault key with token: %w", err)
 		}
+	}
+
+	// Check readErr after performing equivalent cryptographic work above,
+	// so that a missing invite is indistinguishable from a wrong token.
+	if readErr != nil {
+		return fmt.Errorf("invalid or expired vault invite")
 	}
 
 	// Wrap the vault key with the user's own agent-derived key
