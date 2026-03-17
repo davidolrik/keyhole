@@ -723,6 +723,87 @@ func TestAcceptLogsPendingInviteDeletionFailure(t *testing.T) {
 	}
 }
 
+func TestRevokeCleansUpPendingInvite(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Alice invites bob (creates pending invite file)
+	_, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+
+	// Verify pending invite file exists
+	invitePath := filepath.Join(dir, "vaults", "tv", "pending", "bob.invite")
+	if _, err := os.Stat(invitePath); err != nil {
+		t.Fatalf("pending invite should exist before revoke: %v", err)
+	}
+
+	// Revoke bob (even though he hasn't accepted yet, there might be a
+	// membership from a previous accept — simulate by adding bob as member first)
+	// First accept, then revoke to test the full flow
+	bobAg, bobPub := newTestAgent(t)
+	token2, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite (2nd): %v", err)
+	}
+	if err := mgr.Accept("tv", "bob", token2, bobAg, bobPub); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	// Re-invite bob (creates a new pending invite while he's a member — shouldn't happen
+	// in practice but tests the cleanup path)
+	if err := mgr.Revoke("tv", "alice", "bob"); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	// The pending invite file should have been cleaned up
+	if _, err := os.Stat(invitePath); err == nil {
+		t.Error("pending invite file should be deleted after revoke")
+	}
+}
+
+func TestRevokeDeletesPendingInviteBeforeAccept(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Invite bob and have him accept
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+	if err := mgr.Accept("tv", "bob", token, bobAg, bobPub); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	// Re-invite bob after revoking (simulates the attack scenario)
+	if err := mgr.Revoke("tv", "alice", "bob"); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	// Stale invite token should not allow bob to rejoin
+	err = mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	if err == nil {
+		t.Error("revoked user should not be able to rejoin with stale invite token")
+	}
+	if mgr.HasAccess("tv", "bob") {
+		t.Error("bob should not have access after revoke")
+	}
+}
+
 func TestRevokeNonMemberFails(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)

@@ -480,6 +480,10 @@ func (m *Manager) Revoke(name, revoker, targetUser string) error {
 		// Non-fatal: key may not exist (e.g. pending invite that was never accepted)
 	}
 
+	// Clean up any pending invite to prevent a revoked user from rejoining
+	// via a stale invite token.
+	m.store.DeletePendingInvite(name, targetUser)
+
 	return nil
 }
 
