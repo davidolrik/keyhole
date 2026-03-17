@@ -73,11 +73,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Merge: defaults < file < env < cli
 	cfg := config.Merge(defaults, fileCfg, envCfg, cliCfg)
 
+	serverSecret := []byte(cfg.ServerSecret)
+	cfg.ServerSecret = ""
 	srv, err := server.New(server.Config{
 		Listen:       cfg.Listen,
 		DataDir:      cfg.DataDir,
 		Admins:       cfg.Admins,
-		ServerSecret: []byte(cfg.ServerSecret),
+		ServerSecret: serverSecret,
 		Version:      Version,
 	})
 	if err != nil {
