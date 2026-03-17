@@ -6,11 +6,13 @@ import (
 )
 
 type ipEntry struct {
-	count       int
-	windowStart time.Time
+	timestamps []time.Time
 }
 
-// rateLimiter enforces a fixed-window rate limit per key (typically IP address).
+// rateLimiter enforces a sliding-window rate limit per key (typically IP address).
+// Each request timestamp is recorded, and only requests within the current window
+// are counted. This prevents burst attacks across window boundaries that fixed-window
+// counters allow.
 type rateLimiter struct {
 	mu        sync.Mutex
 	ips       map[string]*ipEntry
@@ -33,11 +35,11 @@ func (rl *rateLimiter) allow(key string) bool {
 
 	now := time.Now()
 
-	// Periodically sweep expired entries to prevent unbounded memory growth
-	// from unique IPs (e.g. botnet scans). Sweep at most once per window.
+	// Periodically sweep entries with no recent timestamps to prevent
+	// unbounded memory growth from unique IPs (e.g. botnet scans).
 	if now.Sub(rl.lastSweep) > rl.window {
 		for k, e := range rl.ips {
-			if now.Sub(e.windowStart) > rl.window {
+			if len(e.timestamps) == 0 || now.Sub(e.timestamps[len(e.timestamps)-1]) > rl.window {
 				delete(rl.ips, k)
 			}
 		}
@@ -45,15 +47,23 @@ func (rl *rateLimiter) allow(key string) bool {
 	}
 
 	entry, ok := rl.ips[key]
-	if !ok || now.Sub(entry.windowStart) > rl.window {
-		rl.ips[key] = &ipEntry{count: 1, windowStart: now}
+	if !ok {
+		rl.ips[key] = &ipEntry{timestamps: []time.Time{now}}
 		return true
 	}
 
-	if entry.count >= rl.limit {
+	// Evict timestamps outside the sliding window
+	cutoff := now.Add(-rl.window)
+	start := 0
+	for start < len(entry.timestamps) && entry.timestamps[start].Before(cutoff) {
+		start++
+	}
+	entry.timestamps = entry.timestamps[start:]
+
+	if len(entry.timestamps) >= rl.limit {
 		return false
 	}
 
-	entry.count++
+	entry.timestamps = append(entry.timestamps, now)
 	return true
 }

@@ -57,6 +57,42 @@ func TestRateLimiterResetsAfterWindow(t *testing.T) {
 	}
 }
 
+func TestRateLimiterSlidingWindowPreventsEdgeBurst(t *testing.T) {
+	// With a sliding window, requests near the end of one window should
+	// still count against the limit in the next window, preventing an
+	// attacker from bursting 2x the limit across window boundaries.
+	rl := newRateLimiter(4, 100*time.Millisecond)
+
+	// Use 3 of 4 allowed requests
+	for i := 0; i < 3; i++ {
+		if !rl.allow("1.2.3.4") {
+			t.Fatalf("request %d should be allowed", i+1)
+		}
+	}
+
+	// Wait for half the window to pass, then send 1 more (4th, at the limit)
+	time.Sleep(50 * time.Millisecond)
+	if !rl.allow("1.2.3.4") {
+		t.Fatal("4th request should be allowed (at limit)")
+	}
+
+	// Now wait just past the original window boundary. With a fixed-window
+	// limiter, all 4 slots would reset and we'd get 4 more immediately.
+	// With a sliding window, the 3 early requests have expired but the
+	// recent one (50ms ago) still counts — so only 3 more should be allowed.
+	time.Sleep(55 * time.Millisecond)
+
+	allowed := 0
+	for i := 0; i < 4; i++ {
+		if rl.allow("1.2.3.4") {
+			allowed++
+		}
+	}
+	if allowed >= 4 {
+		t.Errorf("sliding window should limit burst across boundary: got %d allowed, want < 4", allowed)
+	}
+}
+
 func TestRateLimiterSweepsExpiredEntries(t *testing.T) {
 	rl := newRateLimiter(2, 50*time.Millisecond)
 
