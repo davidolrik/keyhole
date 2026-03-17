@@ -561,6 +561,27 @@ func TestUsernameAllowlist(t *testing.T) {
 	}
 }
 
+func TestPathLengthLimit(t *testing.T) {
+	longPath := strings.Repeat("a", 513)
+	_, err := command.Parse([]string{"get", longPath})
+	if err == nil {
+		t.Error("expected error for path exceeding 512 characters")
+	}
+
+	// Just at the limit should be fine
+	okPath := strings.Repeat("a", 512)
+	_, err = command.Parse([]string{"get", okPath})
+	if err != nil {
+		t.Errorf("expected path of 512 characters to be accepted, got: %v", err)
+	}
+
+	// Glob with long prefix
+	_, err = command.Parse([]string{"ls", longPath + "*"})
+	if err == nil {
+		t.Error("expected error for glob prefix exceeding 512 characters")
+	}
+}
+
 func TestParsePathNormalization(t *testing.T) {
 	// Paths with redundant slashes should be cleaned
 	got, err := command.Parse([]string{"get", "account//github"})

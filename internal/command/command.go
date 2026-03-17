@@ -389,6 +389,9 @@ func sanitizeGlobPrefix(p string) (string, error) {
 	if p == "" {
 		return "", nil
 	}
+	if len(p) > maxPathLength {
+		return "", fmt.Errorf("path exceeds maximum length of %d characters", maxPathLength)
+	}
 	if path.IsAbs(p) {
 		return "", fmt.Errorf("path must be relative")
 	}
@@ -403,9 +406,14 @@ func sanitizeGlobPrefix(p string) (string, error) {
 	return p, nil
 }
 
+const maxPathLength = 512
+
 // sanitizePath cleans a secret path and rejects unsafe components.
 // Rejects paths with components starting with '.' (blocks .., .ssh, etc.).
 func sanitizePath(p string) (string, error) {
+	if len(p) > maxPathLength {
+		return "", fmt.Errorf("path exceeds maximum length of %d characters", maxPathLength)
+	}
 	if strings.Contains(p, ":") {
 		return "", fmt.Errorf("path must not contain ':'")
 	}
