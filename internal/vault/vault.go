@@ -327,6 +327,37 @@ func (m *Manager) Promote(name, promoter, targetUser string) error {
 	return m.store.WriteVaultMembers(name, membersJSON)
 }
 
+// Demote demotes a vault admin to member. Only owners and admins can demote.
+func (m *Manager) Demote(name, demoter, targetUser string) error {
+	members, err := m.Members(name)
+	if err != nil {
+		return fmt.Errorf("read members: %w", err)
+	}
+
+	demoterRole, ok := members[demoter]
+	if !ok || (demoterRole != RoleOwner && demoterRole != RoleAdmin) {
+		return fmt.Errorf("permission denied: %q is not an owner or admin of vault %q", demoter, name)
+	}
+
+	targetRole, ok := members[targetUser]
+	if !ok {
+		return fmt.Errorf("user %q is not a member of vault %q", targetUser, name)
+	}
+	if targetRole == RoleOwner {
+		return fmt.Errorf("cannot demote the owner")
+	}
+	if targetRole == RoleMember {
+		return fmt.Errorf("user %q is already a member", targetUser)
+	}
+
+	members[targetUser] = RoleMember
+	membersJSON, err := json.Marshal(members)
+	if err != nil {
+		return fmt.Errorf("marshal members: %w", err)
+	}
+	return m.store.WriteVaultMembers(name, membersJSON)
+}
+
 // Destroy permanently deletes a vault. Only the vault owner can do this.
 func (m *Manager) Destroy(name, username string) error {
 	data, err := m.store.ReadVaultMeta(name)

@@ -4,11 +4,11 @@ Vaults let teams share secrets. Each vault has its own encryption key, and each 
 
 ## Vault roles
 
-| Role     | Permissions                          |
-| -------- | ------------------------------------ |
-| `owner`  | Full control (one per vault)         |
-| `admin`  | Can invite and promote members       |
-| `member` | Can read and write secrets           |
+| Role     | Permissions                             |
+| -------- | --------------------------------------- |
+| `owner`  | Full control (one per vault)            |
+| `admin`  | Can invite, promote, and demote members |
+| `member` | Can read and write secrets              |
 
 ## Creating a vault
 
@@ -40,6 +40,14 @@ ssh -A alice@keys.example.com vault promote team bob
 ```
 
 Promotes a `member` to `admin`.
+
+## Demoting members
+
+```sh
+ssh -A alice@keys.example.com vault demote team bob
+```
+
+Demotes an `admin` to `member`. The vault owner cannot be demoted.
 
 ## Listing members
 

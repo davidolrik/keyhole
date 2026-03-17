@@ -25,6 +25,7 @@ ssh -i ~/.ssh/id_ed25519 bob@keys.example.com register kh_a3f9b2c1d4e567890abcde
 
 ## How invite codes work
 
-- Invite codes are **single-use**: they are deleted immediately on successful registration.
+- Invite codes are **single-use** and **expire after 72 hours**.
+- Codes are consumed atomically (moved to a `consumed/` directory) on successful registration.
 - If registration is declined, the code remains valid for another attempt.
 - Only admins can generate invite codes.

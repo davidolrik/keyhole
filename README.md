@@ -177,6 +177,7 @@ Use colon syntax to target a vault: `vault:path`.
 | `vault invite <name> <user>`    | Invite a user to a vault (admin/owner)                |
 | `vault accept <name> <token>`   | Accept a vault invitation                             |
 | `vault promote <name> <user>`   | Promote a member to admin (admin/owner)               |
+| `vault demote <name> <user>`    | Demote an admin to member (admin/owner)               |
 | `vault members <name>`          | List vault members and roles                          |
 | `vault destroy <name>`          | Permanently destroy a vault (owner only)              |
 
@@ -264,7 +265,7 @@ ssh -i ~/.ssh/id_ed25519 bob@keys.example.com register kh_a3f9b2c1d4e567890abcde
 # Registration successful. You can now connect as bob.
 ```
 
-Invite codes are single-use: they are deleted immediately on successful registration. If registration is declined, the code remains valid for another attempt.
+Invite codes are single-use and expire after 72 hours. They are consumed atomically on successful registration. If registration is declined, the code remains valid for another attempt.
 
 ## Colors
 
@@ -299,7 +300,9 @@ Host keys.example.com
 ├── keyhole.hcl                     # Config file (optional)
 ├── audit.log                       # Structured audit log
 ├── invites/
-│   └── kh_<random>                 # Pending invite codes (empty files)
+│   ├── kh_<random>                 # Pending invite codes (contain creation timestamp)
+│   └── consumed/
+│       └── kh_<random>             # Used invite codes (moved here atomically)
 ├── vaults/
 │   └── {name}/
 │       ├── meta.json               # {"owner","created"}
@@ -307,7 +310,7 @@ Host keys.example.com
 │       ├── keys/
 │       │   └── {user}.enc          # Wrapped vault key per member
 │       ├── pending/
-│       │   └── {user}.invite       # Invite-wrapped vault key
+│       │   └── {user}.invite       # Invite-wrapped vault key (JSON: wrapped key + timestamp)
 │       └── secrets/
 │           └── {path}.enc          # Encrypted vault secret
 └── {username}/
@@ -341,7 +344,7 @@ The log is append-only and survives server restarts.
 - **Agent required for get/set.** If the SSH agent is not forwarded, the server returns an error immediately rather than hanging.
 - **No shell.** The server accepts only structured commands; there is no shell access.
 - **Vault key wrapping.** Vault keys are individually wrapped per member using their SSH agent signature, so revoking a member does not require re-encrypting all vault secrets.
-- **Two-phase vault invite.** Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, the vault key is re-wrapped with the member's agent key.
+- **Two-phase vault invite.** Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, the vault key is re-wrapped with the member's agent key. Vault invites expire after 72 hours.
 - **Server secret backup.** Store `server_secret` somewhere safe and separate from the data directory. Without it, every stored secret is permanently inaccessible.
 
 ## Requirements

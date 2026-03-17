@@ -60,7 +60,7 @@ flowchart TD
 
 This two-phase invite design means:
 
-1. **Invite**: the vault key is wrapped with an HKDF-derived key from the invite token
-2. **Accept**: the user decrypts with the token, then re-wraps the vault key with their agent-derived key
+1. **Invite**: the vault key is wrapped with an HKDF-derived key from the invite token. The HKDF info parameter includes the vault name and target username for domain separation, preventing cross-vault token reuse.
+2. **Accept**: the user decrypts with the token, then re-wraps the vault key with their agent-derived key. Vault invites expire after 72 hours.
 
 Revoking a member removes their wrapped key — no vault secrets need to be re-encrypted.

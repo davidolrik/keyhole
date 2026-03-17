@@ -7,7 +7,9 @@
 ├── keyhole.hcl                     # Config file (optional)
 ├── audit.log                       # Structured audit log
 ├── invites/
-│   └── kh_<random>                 # Pending invite codes (empty files)
+│   ├── kh_<random>                 # Pending invite codes (contain creation timestamp)
+│   └── consumed/
+│       └── kh_<random>             # Used invite codes (moved here atomically)
 ├── vaults/
 │   └── {name}/
 │       ├── meta.json               # {"owner","created"}
@@ -15,7 +17,7 @@
 │       ├── keys/
 │       │   └── {user}.enc          # Wrapped vault key per member
 │       ├── pending/
-│       │   └── {user}.invite       # Invite-wrapped vault key
+│       │   └── {user}.invite       # Invite-wrapped vault key (JSON: wrapped key + timestamp)
 │       └── secrets/
 │           └── {path}.enc          # Encrypted vault secret
 └── {username}/

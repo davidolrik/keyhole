@@ -940,6 +940,92 @@ func TestVaultPromoteAndInvite(t *testing.T) {
 	}
 }
 
+func TestVaultDemote(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+
+	// Invite and accept bob
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	token := strings.TrimSpace(tokenOut)
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+token)
+
+	// Promote bob to admin
+	sshRun(t, addr, alice.cfg, alice.ag, "vault promote tv bob")
+
+	// Verify bob is admin
+	membersOut, err := sshRun(t, addr, alice.cfg, alice.ag, "vault members tv")
+	if err != nil {
+		t.Fatalf("vault members: %v", err)
+	}
+	if !strings.Contains(membersOut, "admin") {
+		t.Fatalf("bob should be admin: %q", membersOut)
+	}
+
+	// Demote bob
+	out, err := sshRun(t, addr, alice.cfg, alice.ag, "vault demote tv bob")
+	if err != nil {
+		t.Fatalf("vault demote: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Demoted") {
+		t.Errorf("vault demote output = %q, expected 'Demoted'", out)
+	}
+
+	// Verify bob is now member
+	membersOut, err = sshRun(t, addr, alice.cfg, alice.ag, "vault members tv")
+	if err != nil {
+		t.Fatalf("vault members: %v", err)
+	}
+	// Bob should appear as member, not admin
+	for _, line := range strings.Split(membersOut, "\n") {
+		if strings.Contains(line, "bob") && strings.Contains(line, "admin") {
+			t.Errorf("bob should be member, not admin: %q", membersOut)
+		}
+	}
+}
+
+func TestVaultDemoteNonAdminFails(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	token := strings.TrimSpace(tokenOut)
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+token)
+
+	// Bob (member) cannot demote alice
+	_, err := sshRun(t, addr, bob.cfg, bob.ag, "vault demote tv alice")
+	if err == nil {
+		t.Error("expected error when member tries to demote")
+	}
+}
+
+func TestVaultDemotedAdminCannotInvite(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
+
+	// Invite bob, accept, promote to admin
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
+	token := strings.TrimSpace(tokenOut)
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept tv "+token)
+	sshRun(t, addr, alice.cfg, alice.ag, "vault promote tv bob")
+
+	// Register charlie
+	charlie := newTestUser(t, "charlie")
+	inviteOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	inviteCode := strings.TrimSpace(inviteOut)
+	sshRunWithStdin(t, addr, charlie.cfg, nil, "register "+inviteCode, "y\n")
+
+	// Demote bob back to member
+	sshRun(t, addr, alice.cfg, alice.ag, "vault demote tv bob")
+
+	// Bob (now member) should NOT be able to invite
+	_, err := sshRun(t, addr, bob.cfg, bob.ag, "vault invite tv charlie")
+	if err == nil {
+		t.Error("expected error when demoted admin tries to invite")
+	}
+}
+
 func TestVaultMembers(t *testing.T) {
 	addr, alice, bob := testServerSetupMultiUser(t)
 
@@ -1314,7 +1400,7 @@ func TestHelpIncludesVaultCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault members", "vault destroy", "vault list", "move"} {
+	for _, want := range []string{"vault create", "vault invite", "vault accept", "vault promote", "vault demote", "vault members", "vault destroy", "vault list", "move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help output missing %q", want)
 		}

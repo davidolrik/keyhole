@@ -248,6 +248,109 @@ func TestPromote(t *testing.T) {
 	}
 }
 
+func TestDemote(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	mgr.Promote("tv", "alice", "bob")
+
+	// Verify bob is admin
+	members, _ := mgr.Members("tv")
+	if members["bob"] != vault.RoleAdmin {
+		t.Fatalf("bob role = %q, want admin", members["bob"])
+	}
+
+	// Demote bob back to member
+	if err := mgr.Demote("tv", "alice", "bob"); err != nil {
+		t.Fatalf("Demote: %v", err)
+	}
+
+	members, _ = mgr.Members("tv")
+	if members["bob"] != vault.RoleMember {
+		t.Errorf("bob role = %q, want member", members["bob"])
+	}
+}
+
+func TestDemoteOwnerFails(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Invite bob, accept, promote to admin
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+	mgr.Promote("tv", "alice", "bob")
+
+	// Cannot demote the owner
+	err := mgr.Demote("tv", "bob", "alice")
+	if err == nil {
+		t.Error("expected error demoting the owner")
+	}
+}
+
+func TestDemoteMemberFails(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", token, bobAg, bobPub)
+
+	// Cannot demote someone who is already a member
+	err := mgr.Demote("tv", "alice", "bob")
+	if err == nil {
+		t.Error("expected error demoting a member")
+	}
+}
+
+func TestMemberCannotDemote(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+	charlieAg, charliePub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Invite bob and charlie, promote both to admin
+	tokenB, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	mgr.Accept("tv", "bob", tokenB, bobAg, bobPub)
+
+	tokenC, _ := mgr.Invite("tv", "alice", "charlie", aliceAg, alicePub)
+	mgr.Accept("tv", "charlie", tokenC, charlieAg, charliePub)
+	mgr.Promote("tv", "alice", "charlie")
+
+	// Bob (member) cannot demote charlie (admin)
+	err := mgr.Demote("tv", "bob", "charlie")
+	if err == nil {
+		t.Error("expected error when member tries to demote")
+	}
+}
+
 func TestAdminCanInvite(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)

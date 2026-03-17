@@ -26,7 +26,11 @@ Vault keys are individually wrapped per member using their SSH agent signature, 
 
 ## Two-phase vault invite
 
-Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, the vault key is re-wrapped with the member's agent key. See [Encryption](/security/encryption) for details.
+Invite tokens wrap the vault key with a temporary HKDF-derived key; on accept, the vault key is re-wrapped with the member's agent key. The HKDF info parameter includes the vault name and target username for domain separation. See [Encryption](/security/encryption) for details.
+
+## Invite expiration
+
+Both user invite codes and vault invite tokens expire after 72 hours. Expired invites are rejected. User invite codes are consumed atomically using a filesystem rename to prevent race conditions.
 
 ## Server secret backup
 

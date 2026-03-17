@@ -91,6 +91,8 @@ func (h *Handler) Handle(sess ssh.Session, username string, pubKey gossh.PublicK
 		return h.handleVaultAccept(sess, username, pubKey, cmd.Vault, cmd.InviteCode)
 	case OpVaultPromote:
 		return h.handleVaultPromote(sess, username, cmd.Vault, cmd.TargetUser)
+	case OpVaultDemote:
+		return h.handleVaultDemote(sess, username, cmd.Vault, cmd.TargetUser)
 	case OpVaultMembers:
 		return h.handleVaultMembers(sess, username, cmd.Vault)
 	case OpVaultList:
@@ -403,6 +405,18 @@ func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targ
 		h.auditLog.VaultOp("promote", username, sess.RemoteAddr().String(), vaultName, "target", targetUser)
 	}
 	fmt.Fprintf(sess, "Promoted %q to admin in vault %q.\n", targetUser, vaultName)
+	return nil
+}
+
+func (h *Handler) handleVaultDemote(sess ssh.Session, username, vaultName, targetUser string) error {
+	if err := h.vaultMgr.Demote(vaultName, username, targetUser); err != nil {
+		return fmt.Errorf("vault demote: %w", err)
+	}
+
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("demote", username, sess.RemoteAddr().String(), vaultName, "target", targetUser)
+	}
+	fmt.Fprintf(sess, "Demoted %q to member in vault %q.\n", targetUser, vaultName)
 	return nil
 }
 
@@ -739,6 +753,7 @@ func helpText(color bool, version string) string {
 		cmd2("vault invite", yellow+"<name> <user>"+reset, "Invite user to vault") +
 		cmd2("vault accept", yellow+"<name> <token>"+reset, "Accept vault invite") +
 		cmd2("vault promote", yellow+"<name> <user>"+reset, "Promote member to admin") +
+		cmd2("vault demote", yellow+"<name> <user>"+reset, "Demote admin to member") +
 		cmd2("vault members", yellow+"<name>"+reset, "List vault members") +
 		cmd2("vault destroy", yellow+"<name>"+reset, "Permanently destroy a vault "+dim+"[owner]"+reset) +
 		cmd2("vault list", "", "List your vaults") +

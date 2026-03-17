@@ -32,6 +32,7 @@ Use colon syntax to target a vault: `vault:path`.
 | `vault invite <name> <user>`    | Invite a user to a vault (admin/owner)  |
 | `vault accept <name> <token>`   | Accept a vault invitation               |
 | `vault promote <name> <user>`   | Promote a member to admin (admin/owner) |
+| `vault demote <name> <user>`    | Demote an admin to member (admin/owner) |
 | `vault members <name>`          | List vault members and roles            |
 | `vault destroy <name>`          | Permanently destroy a vault (owner only)|
 
