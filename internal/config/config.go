@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,18 +19,32 @@ type Config struct {
 }
 
 // LoadFile reads and decodes an HCL config file. Returns (nil, nil) if the file doesn't exist.
+// If the config contains a server_secret, the file must not be group- or world-readable.
 func LoadFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
 	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 	var cfg Config
 	if err := hclsimple.Decode(path, data, nil, &cfg); err != nil {
 		return nil, err
 	}
+
+	if cfg.ServerSecret != "" {
+		mode := info.Mode().Perm()
+		if mode&0077 != 0 {
+			return nil, fmt.Errorf("config file %s has permission %04o; must not be group- or world-readable when it contains server_secret (try: chmod 600 %s)", path, mode, path)
+		}
+	}
+
 	return &cfg, nil
 }
 

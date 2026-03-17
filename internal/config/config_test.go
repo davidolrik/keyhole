@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -159,6 +160,57 @@ func TestMerge_DefaultsUsedWhenNothingOverrides(t *testing.T) {
 	}
 	if len(got.Admins) != 1 || got.Admins[0] != "root" {
 		t.Errorf("Admins = %v, want [root]", got.Admins)
+	}
+}
+
+func TestLoadFile_WorldReadableWithSecret(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keyhole.hcl")
+	content := `server_secret = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatal("expected error for world-readable config containing server_secret")
+	}
+	if !strings.Contains(err.Error(), "permission") {
+		t.Errorf("error = %q, expected to mention 'permission'", err)
+	}
+}
+
+func TestLoadFile_RestrictedWithSecret(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keyhole.hcl")
+	content := `server_secret = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.ServerSecret == "" {
+		t.Error("expected server_secret to be loaded")
+	}
+}
+
+func TestLoadFile_WorldReadableWithoutSecret(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keyhole.hcl")
+	content := `listen = ":3333"`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.Listen != ":3333" {
+		t.Errorf("Listen = %q, want %q", cfg.Listen, ":3333")
 	}
 }
 
