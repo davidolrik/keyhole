@@ -612,17 +612,18 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 		}
 	}
 
-	// Delete source
+	// Delete source — return an error if deletion fails so the user knows
+	// the secret exists in both locations and can take corrective action.
 	if cmd.Vault != "" {
 		if err := h.fileStore.DeleteVaultSecret(cmd.Vault, cmd.Path); err != nil {
-			fmt.Fprintf(sess, "Warning: could not delete source: %v\n", err)
+			return fmt.Errorf("secret copied to destination but source could not be deleted: %w", err)
 		}
 	} else {
 		// For personal vault, we don't have a Delete method on the Store interface.
 		// Delete the file directly.
 		srcFile := filepath.Join(h.dataDir, username, "account", filepath.FromSlash(cmd.Path)+".enc")
 		if err := os.Remove(srcFile); err != nil {
-			fmt.Fprintf(sess, "Warning: could not delete source: %v\n", err)
+			return fmt.Errorf("secret copied to destination but source could not be deleted: %w", err)
 		}
 	}
 
