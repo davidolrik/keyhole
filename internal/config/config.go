@@ -38,11 +38,9 @@ func LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if cfg.ServerSecret != "" {
-		mode := info.Mode().Perm()
-		if mode&0077 != 0 {
-			return nil, fmt.Errorf("config file %s has permission %04o; must not be group- or world-readable when it contains server_secret (try: chmod 600 %s)", path, mode, path)
-		}
+	mode := info.Mode().Perm()
+	if mode&0077 != 0 {
+		return nil, fmt.Errorf("config file %s has permission %04o; must not be group- or world-readable (try: chmod 600 %s)", path, mode, path)
 	}
 
 	return &cfg, nil

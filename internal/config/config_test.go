@@ -15,7 +15,7 @@ listen   = ":3333"
 data_dir = "/var/lib/keyhole"
 admins   = ["alice", "bob"]
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -51,7 +51,7 @@ func TestLoadFile_Partial(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keyhole.hcl")
 	content := `listen = ":4444"`
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,12 +205,12 @@ func TestLoadFile_WorldReadableWithoutSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
-	if err != nil {
-		t.Fatalf("LoadFile: %v", err)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatal("expected error for world-readable config file")
 	}
-	if cfg.Listen != ":3333" {
-		t.Errorf("Listen = %q, want %q", cfg.Listen, ":3333")
+	if !strings.Contains(err.Error(), "permission") {
+		t.Errorf("error = %q, expected to mention 'permission'", err)
 	}
 }
 
