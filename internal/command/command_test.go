@@ -80,8 +80,23 @@ func TestParse(t *testing.T) {
 			want: command.Command{Op: command.OpHelp},
 		},
 		{
-			name:    "unknown command",
-			argv:    []string{"delete", "account/github"},
+			name: "del command",
+			argv: []string{"del", "account/github"},
+			want: command.Command{Op: command.OpDelete, Path: "account/github"},
+		},
+		{
+			name: "delete alias",
+			argv: []string{"delete", "account/github"},
+			want: command.Command{Op: command.OpDelete, Path: "account/github"},
+		},
+		{
+			name:    "del without path",
+			argv:    []string{"del"},
+			wantErr: true,
+		},
+		{
+			name:    "del with extra args",
+			argv:    []string{"del", "account/github", "extra"},
 			wantErr: true,
 		},
 		{
@@ -239,6 +254,21 @@ func TestParseVaultSyntax(t *testing.T) {
 			name: "personal vault explicit",
 			argv: []string{"get", "personal:foo"},
 			want: command.Command{Op: command.OpGet, Path: "foo", Vault: ""},
+		},
+		{
+			name: "del with vault prefix",
+			argv: []string{"del", "tv:secret"},
+			want: command.Command{Op: command.OpDelete, Path: "secret", Vault: "tv"},
+		},
+		{
+			name: "del with personal prefix",
+			argv: []string{"del", "personal:secret"},
+			want: command.Command{Op: command.OpDelete, Path: "secret", Vault: ""},
+		},
+		{
+			name: "delete with vault prefix",
+			argv: []string{"delete", "tv:foo/bar"},
+			want: command.Command{Op: command.OpDelete, Path: "foo/bar", Vault: "tv"},
 		},
 		// Vault management commands
 		{

@@ -28,6 +28,7 @@ const (
 	OpVaultDestroy
 	OpVaultRevoke
 	OpMove
+	OpDelete
 )
 
 // String returns the lowercase name of the operation.
@@ -65,6 +66,8 @@ func (op Op) String() string {
 		return "vault revoke"
 	case OpMove:
 		return "move"
+	case OpDelete:
+		return "del"
 	default:
 		return "unknown"
 	}
@@ -121,6 +124,16 @@ func Parse(argv []string) (Command, error) {
 			return Command{Op: OpList}, nil
 		}
 		return parseListArg(args[0])
+
+	case "del", "delete":
+		if len(args) != 1 {
+			return Command{}, fmt.Errorf("del requires exactly one path argument")
+		}
+		vault, p, err := parseVaultPath(args[0])
+		if err != nil {
+			return Command{}, err
+		}
+		return Command{Op: OpDelete, Path: p, Vault: vault}, nil
 
 	case "invite":
 		if len(args) != 0 {

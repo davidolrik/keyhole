@@ -275,7 +275,7 @@ func TestSetWithoutAgentFails(t *testing.T) {
 func TestUnknownCommandFails(t *testing.T) {
 	addr, _, alice := testServerSetup(t)
 
-	_, err := sshRun(t, addr, alice.cfg, alice.ag, "delete account/github")
+	_, err := sshRun(t, addr, alice.cfg, alice.ag, "frobnicate account/github")
 	if err == nil {
 		t.Error("expected error for unknown command")
 	}
@@ -2071,5 +2071,222 @@ func TestEmptyServerSecretFileRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "at least 64") {
 		t.Errorf("error = %q, expected message about minimum 64 characters", err)
+	}
+}
+
+func TestDeletePersonalSecret(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	// Store a secret
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "hunter2"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	// Verify it exists
+	got, err := sshRun(t, addr, alice.cfg, alice.ag, "get account/github")
+	if err != nil {
+		t.Fatalf("get before delete: %v", err)
+	}
+	if got != "hunter2" {
+		t.Errorf("get = %q, want %q", got, "hunter2")
+	}
+
+	// Delete it with confirmation
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "del account/github", "y\n")
+	if err != nil {
+		t.Fatalf("del: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Deleted") {
+		t.Errorf("del output = %q, expected 'Deleted'", out)
+	}
+
+	// Verify it's gone
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "get account/github")
+	if err == nil {
+		t.Error("expected error getting deleted secret")
+	}
+}
+
+func TestDeleteAlias(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "hunter2"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	// Use "delete" alias
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "delete account/github", "y\n")
+	if err != nil {
+		t.Fatalf("delete: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Deleted") {
+		t.Errorf("delete output = %q, expected 'Deleted'", out)
+	}
+
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "get account/github")
+	if err == nil {
+		t.Error("expected error getting deleted secret")
+	}
+}
+
+func TestDeleteCancelled(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "hunter2"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	// Reject deletion
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "del account/github", "n\n")
+	if err != nil {
+		t.Fatalf("del (cancel): unexpected error %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "cancelled") {
+		t.Errorf("del cancel output = %q, expected 'cancelled'", out)
+	}
+
+	// Secret should still exist
+	got, err := sshRun(t, addr, alice.cfg, alice.ag, "get account/github")
+	if err != nil {
+		t.Fatalf("get after cancel: %v", err)
+	}
+	if got != "hunter2" {
+		t.Errorf("get = %q, want %q", got, "hunter2")
+	}
+}
+
+func TestDeleteNonExistent(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	_, err := sshRun(t, addr, alice.cfg, alice.ag, "del nonexistent/secret")
+	if err == nil {
+		t.Error("expected error deleting nonexistent secret")
+	}
+}
+
+func TestDeleteWithoutAgentFails(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	_, err := sshRun(t, addr, alice.cfg, nil, "del account/something")
+	if err == nil {
+		t.Error("expected error when deleting without agent")
+	}
+}
+
+func TestDeleteVaultSecret(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	// Create vault and store a secret
+	if _, err := sshRun(t, addr, alice.cfg, alice.ag, "vault create teamvault"); err != nil {
+		t.Fatalf("vault create: %v", err)
+	}
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set teamvault:db/password", "s3cret"); err != nil {
+		t.Fatalf("vault set: %v", err)
+	}
+
+	// Verify it exists
+	got, err := sshRun(t, addr, alice.cfg, alice.ag, "get teamvault:db/password")
+	if err != nil {
+		t.Fatalf("vault get before delete: %v", err)
+	}
+	if got != "s3cret" {
+		t.Errorf("vault get = %q, want %q", got, "s3cret")
+	}
+
+	// Delete it
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "del teamvault:db/password", "y\n")
+	if err != nil {
+		t.Fatalf("vault del: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Deleted") {
+		t.Errorf("vault del output = %q, expected 'Deleted'", out)
+	}
+
+	// Verify it's gone
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "get teamvault:db/password")
+	if err == nil {
+		t.Error("expected error getting deleted vault secret")
+	}
+}
+
+func TestDeleteVaultSecretNonMemberDenied(t *testing.T) {
+	dataDir := testDataDir(t)
+	alice := newTestUser(t, "alice")
+	bob := newTestUser(t, "bob")
+
+	cfg := server.Config{DataDir: dataDir, Admins: []string{"alice"}}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	srv.AddUserKey("alice", alice.sshPub)
+	srv.AddUserKey("bob", bob.sshPub)
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	// Alice creates a vault and stores a secret
+	if _, err := sshRun(t, addr, alice.cfg, alice.ag, "vault create teamvault"); err != nil {
+		t.Fatalf("vault create: %v", err)
+	}
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set teamvault:db/password", "s3cret"); err != nil {
+		t.Fatalf("vault set: %v", err)
+	}
+
+	// Bob (not a member) tries to delete
+	_, err = sshRunWithStdin(t, addr, bob.cfg, bob.ag, "del teamvault:db/password", "y\n")
+	if err == nil {
+		t.Error("expected error when non-member deletes vault secret")
+	}
+}
+
+func TestDeletePersonalPrefix(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "hunter2"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	// Delete using personal: prefix
+	out, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "del personal:account/github", "y\n")
+	if err != nil {
+		t.Fatalf("del personal: %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Deleted") {
+		t.Errorf("del output = %q, expected 'Deleted'", out)
+	}
+
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "get account/github")
+	if err == nil {
+		t.Error("expected error getting deleted secret")
+	}
+}
+
+func TestDeleteNotInList(t *testing.T) {
+	addr, _, alice := testServerSetup(t)
+
+	// Store two secrets
+	for _, path := range []string{"account/github", "account/twitter"} {
+		if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set "+path, "value"); err != nil {
+			t.Fatalf("set %s: %v", path, err)
+		}
+	}
+
+	// Delete one
+	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "del account/github", "y\n"); err != nil {
+		t.Fatalf("del: %v", err)
+	}
+
+	// List should show only the remaining secret
+	out, err := sshRun(t, addr, alice.cfg, alice.ag, "list")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 1 {
+		t.Errorf("list = %q (%d lines), want 1", out, len(lines))
 	}
 }

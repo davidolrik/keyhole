@@ -106,6 +106,11 @@ func (h *Handler) Handle(sess ssh.Session, username string, pubKey gossh.PublicK
 		return h.handleVaultListAll(sess, username)
 	case OpVaultDestroy:
 		return h.handleVaultDestroy(sess, username, cmd.Vault)
+	case OpDelete:
+		if cmd.Vault != "" {
+			return h.handleVaultDelete(sess, username, pubKey, cmd.Vault, cmd.Path)
+		}
+		return h.handleDelete(sess, username, pubKey, cmd.Path)
 	case OpMove:
 		return h.handleMove(sess, username, pubKey, cmd)
 	case OpHelp:
@@ -233,6 +238,96 @@ func FormatPath(p string, color bool) string {
 	return blue + p[:idx+1] + reset + p[idx+1:]
 }
 
+func (h *Handler) handleDelete(sess ssh.Session, username string, pubKey gossh.PublicKey, path string) error {
+	ag, cleanup, err := requireAgent(sess)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Verify the secret exists and is decryptable before prompting for confirmation
+	ciphertext, err := h.store.Read(username, path)
+	if err != nil {
+		return fmt.Errorf("read secret: %w", err)
+	}
+
+	plaintext, err := h.enc.DecryptAndUpgrade(ag, pubKey, h.serverSecret, username, path, ciphertext, func(upgraded []byte) error {
+		return h.store.Write(username, path, upgraded)
+	})
+	if err != nil {
+		return fmt.Errorf("decrypt: %w", err)
+	}
+	crypto.Zeroize(plaintext)
+
+	fmt.Fprintf(sess, "Delete %s? [y/N]: ", path)
+	buf := make([]byte, 1)
+	n, err := sess.Read(buf)
+	if err != nil || n == 0 || (buf[0] != 'y' && buf[0] != 'Y') {
+		fmt.Fprintln(sess, "Delete cancelled.")
+		return nil
+	}
+
+	if err := h.store.Delete(username, path); err != nil {
+		return fmt.Errorf("delete secret: %w", err)
+	}
+
+	fmt.Fprintln(sess, "Deleted.")
+	return nil
+}
+
+func (h *Handler) handleVaultDelete(sess ssh.Session, username string, pubKey gossh.PublicKey, vaultName, path string) error {
+	ag, cleanup, err := requireAgent(sess)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if !h.vaultMgr.HasAccess(vaultName, username) {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("del", username, sess.RemoteAddr().String(), vaultName, "not a member")
+		}
+		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
+	}
+
+	// Verify the secret exists and is decryptable before prompting for confirmation
+	vaultKey, err := h.vaultMgr.VaultKey(vaultName, username, ag, pubKey)
+	if err != nil {
+		return fmt.Errorf("vault key: %w", err)
+	}
+	defer crypto.Zeroize(vaultKey)
+
+	ciphertext, err := h.fileStore.ReadVaultSecret(vaultName, path)
+	if err != nil {
+		return fmt.Errorf("read secret: %w", err)
+	}
+
+	plaintext, err := decryptVaultSecret(vaultKey, path, h.serverSecret, ciphertext, func(upgraded []byte) error {
+		return h.fileStore.WriteVaultSecret(vaultName, path, upgraded)
+	})
+	if err != nil {
+		return fmt.Errorf("decrypt: %w", err)
+	}
+	crypto.Zeroize(plaintext)
+
+	fmt.Fprintf(sess, "Delete %s:%s? [y/N]: ", vaultName, path)
+	buf := make([]byte, 1)
+	n, err := sess.Read(buf)
+	if err != nil || n == 0 || (buf[0] != 'y' && buf[0] != 'Y') {
+		fmt.Fprintln(sess, "Delete cancelled.")
+		return nil
+	}
+
+	if err := h.fileStore.DeleteVaultSecret(vaultName, path); err != nil {
+		return fmt.Errorf("delete secret: %w", err)
+	}
+
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("del", username, sess.RemoteAddr().String(), vaultName)
+	}
+	fmt.Fprintln(sess, "Deleted.")
+	return nil
+}
+
 func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh.PublicKey, vaultName, path string) error {
 	ag, cleanup, err := requireAgent(sess)
 	if err != nil {
@@ -266,6 +361,9 @@ func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh
 	}
 	defer crypto.Zeroize(plaintext)
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("get", username, sess.RemoteAddr().String(), vaultName)
+	}
 	_, err = sess.Write(plaintext)
 	return err
 }
@@ -320,6 +418,9 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 		return fmt.Errorf("write secret: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("set", username, sess.RemoteAddr().String(), vaultName)
+	}
 	fmt.Fprintln(sess, "Secret stored.")
 	return nil
 }
@@ -854,6 +955,7 @@ func helpText(color bool, version string) string {
 		bold + "COMMANDS\n" + reset +
 		cmd("get", yellow+"[vault:]<path>"+reset, "Decrypt and print a secret") +
 		cmd("set", yellow+"[vault:]<path>"+reset, "Encrypt and store a secret") +
+		cmd("del", yellow+"[vault:]<path>"+reset, "Delete a secret") +
 		cmd("list", yellow+"[vault:][prefix]"+reset, "List secrets") +
 		cmd("ls", yellow+"[vault:][prefix]"+reset, "Alias for list") +
 		cmd("move", yellow+"<src> <dst>"+reset, "Move secret between vaults") +
