@@ -1210,6 +1210,80 @@ func TestExpiredInviteCodeRejected(t *testing.T) {
 	}
 }
 
+func TestAuditLogRegistration(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	inviteCode := strings.TrimSpace(inviteOut)
+
+	bob := newTestUser(t, "bob")
+	_, err = sshRunWithStdin(t, addr, bob.cfg, nil, "register "+inviteCode, "y\n")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	logPath := findAuditLog(t)
+	lines := readLines(t, logPath)
+
+	var hasRegistration bool
+	for _, l := range lines {
+		if strings.Contains(l, `"msg":"registration"`) && strings.Contains(l, `"user":"bob"`) {
+			hasRegistration = true
+		}
+	}
+	if !hasRegistration {
+		t.Errorf("no registration event for bob in audit log; lines: %v", lines)
+	}
+}
+
+func TestAuditLogVaultOperations(t *testing.T) {
+	addr, alice, bob := testServerSetupMultiUser(t)
+
+	// Create vault
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create auditv")
+
+	// Invite bob
+	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite auditv bob")
+	token := strings.TrimSpace(tokenOut)
+
+	// Bob accepts
+	sshRun(t, addr, bob.cfg, bob.ag, "vault accept auditv "+token)
+
+	// Promote bob
+	sshRun(t, addr, alice.cfg, alice.ag, "vault promote auditv bob")
+
+	// Destroy vault
+	sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy auditv", "auditv\n")
+
+	// Find audit log
+	dataDir := findDataDir(t)
+	logPath := filepath.Join(dataDir, "audit.log")
+	lines := readLines(t, logPath)
+
+	checks := map[string]bool{
+		"vault_create":  false,
+		"vault_invite":  false,
+		"vault_accept":  false,
+		"vault_promote": false,
+		"vault_destroy": false,
+	}
+	for _, l := range lines {
+		for op := range checks {
+			if strings.Contains(l, `"msg":"`+op+`"`) {
+				checks[op] = true
+			}
+		}
+	}
+	for op, found := range checks {
+		if !found {
+			t.Errorf("no %s event in audit log", op)
+		}
+	}
+}
+
 func TestVaultDestroyPersonalRejected(t *testing.T) {
 	addr, alice := testServerSetup(t)
 

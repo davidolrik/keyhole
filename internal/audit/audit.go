@@ -48,6 +48,27 @@ func (lg *Logger) AuthDenied(username, remote, reason string) {
 	)
 }
 
+// Registration logs a user registration event.
+func (lg *Logger) Registration(username, remote, keyFingerprint, inviteCode string) {
+	lg.l.Info("registration",
+		"user", username,
+		"remote", remote,
+		"key", keyFingerprint,
+		"invite_code", inviteCode,
+	)
+}
+
+// VaultOp logs a vault operation (create, invite, accept, promote, destroy).
+func (lg *Logger) VaultOp(op, actor, remote, vaultName string, attrs ...any) {
+	args := []any{
+		"actor", actor,
+		"remote", remote,
+		"vault", vaultName,
+	}
+	args = append(args, attrs...)
+	lg.l.Info("vault_"+op, args...)
+}
+
 // Command logs the result of an executed command.
 func (lg *Logger) Command(username, remote, op, path string, err error) {
 	if err == nil {

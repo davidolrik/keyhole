@@ -71,7 +71,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 
-	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version)
+	handler := command.NewHandler(store, store, enc, vaultMgr, serverSecret, cfg.DataDir, cfg.Admins, cfg.Version, auditLog)
 
 	s := &Server{
 		cfg:          cfg,

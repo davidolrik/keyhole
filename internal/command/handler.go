@@ -15,6 +15,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	"go.olrik.dev/keyhole/internal/audit"
 	"go.olrik.dev/keyhole/internal/crypto"
 	"go.olrik.dev/keyhole/internal/storage"
 	"go.olrik.dev/keyhole/internal/vault"
@@ -37,10 +38,11 @@ type Handler struct {
 	dataDir      string
 	admins       map[string]bool
 	version      string
+	auditLog     *audit.Logger
 }
 
 // NewHandler creates a Handler.
-func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string) *Handler {
+func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.Encryptor, vaultMgr *vault.Manager, serverSecret []byte, dataDir string, admins []string, version string, auditLog *audit.Logger) *Handler {
 	adminSet := make(map[string]bool, len(admins))
 	for _, a := range admins {
 		adminSet[a] = true
@@ -54,6 +56,7 @@ func NewHandler(store storage.Store, fileStore *storage.FileStore, enc *crypto.E
 		dataDir:      dataDir,
 		admins:       adminSet,
 		version:      version,
+		auditLog:     auditLog,
 	}
 }
 
@@ -347,6 +350,9 @@ func (h *Handler) handleVaultCreate(sess ssh.Session, username string, pubKey go
 		return fmt.Errorf("create vault: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("create", username, sess.RemoteAddr().String(), vaultName)
+	}
 	fmt.Fprintf(sess, "Vault %q created.\n", vaultName)
 	return nil
 }
@@ -363,6 +369,9 @@ func (h *Handler) handleVaultInvite(sess ssh.Session, username string, pubKey go
 		return fmt.Errorf("vault invite: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("invite", username, sess.RemoteAddr().String(), vaultName, "target", targetUser)
+	}
 	fmt.Fprintln(sess, token)
 	return nil
 }
@@ -378,6 +387,9 @@ func (h *Handler) handleVaultAccept(sess ssh.Session, username string, pubKey go
 		return fmt.Errorf("vault accept: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("accept", username, sess.RemoteAddr().String(), vaultName)
+	}
 	fmt.Fprintf(sess, "Joined vault %q.\n", vaultName)
 	return nil
 }
@@ -387,6 +399,9 @@ func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targ
 		return fmt.Errorf("vault promote: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("promote", username, sess.RemoteAddr().String(), vaultName, "target", targetUser)
+	}
 	fmt.Fprintf(sess, "Promoted %q to admin in vault %q.\n", targetUser, vaultName)
 	return nil
 }
@@ -442,6 +457,9 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 		return fmt.Errorf("destroy vault: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("destroy", username, sess.RemoteAddr().String(), vaultName)
+	}
 	fmt.Fprintf(sess, "Vault %q destroyed.\n", vaultName)
 	return nil
 }
@@ -654,6 +672,10 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	}
 	if err := os.WriteFile(authKeysPath, []byte(authorizedLine), 0600); err != nil {
 		return fmt.Errorf("write authorized_keys: %w", err)
+	}
+
+	if h.auditLog != nil {
+		h.auditLog.Registration(username, sess.RemoteAddr().String(), fingerprint, inviteCode)
 	}
 
 	fmt.Fprintf(sess, "Registration successful. You can now connect as %s.\n", username)
