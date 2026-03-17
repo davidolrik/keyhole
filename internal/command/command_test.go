@@ -154,6 +154,21 @@ func TestParse(t *testing.T) {
 			argv: []string{"register", "kh_aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"},
 			want: command.Command{Op: command.OpRegister, InviteCode: "kh_aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"},
 		},
+		{
+			name:    "register with newline in invite code",
+			argv:    []string{"register", "kh_abc\ndef"},
+			wantErr: true,
+		},
+		{
+			name:    "register with tab in invite code",
+			argv:    []string{"register", "kh_abc\tdef"},
+			wantErr: true,
+		},
+		{
+			name:    "register with carriage return in invite code",
+			argv:    []string{"register", "kh_abc\rdef"},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
