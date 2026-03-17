@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -274,11 +275,13 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 // sanitizeError returns only the outermost error message, stripping wrapped
 // internal details that could leak implementation information to SSH clients.
 func sanitizeError(err error) string {
-	msg := err.Error()
-	if idx := strings.Index(msg, ": "); idx != -1 {
-		return msg[:idx]
+	if wrapped := errors.Unwrap(err); wrapped != nil {
+		// Strip the wrapped cause — return only the outer context.
+		full := err.Error()
+		suffix := ": " + wrapped.Error()
+		return strings.TrimSuffix(full, suffix)
 	}
-	return msg
+	return err.Error()
 }
 
 // loadOrGenerateHostKey loads an Ed25519 host key from path, generating one if absent.
