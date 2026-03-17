@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -324,9 +325,10 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		return fmt.Errorf("write members: %w", err)
 	}
 
-	// Remove pending invite
+	// Remove pending invite — log failures since stale invite files waste
+	// storage but don't affect correctness.
 	if err := m.store.DeletePendingInvite(name, username); err != nil {
-		// Non-fatal
+		log.Printf("warning: failed to delete pending invite for %s in vault %s: %v", username, name, err)
 	}
 
 	return nil

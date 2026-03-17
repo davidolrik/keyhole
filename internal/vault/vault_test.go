@@ -1,10 +1,12 @@
 package vault_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -679,6 +681,45 @@ func TestAcceptCleansUpKeyOnMembersWriteFailure(t *testing.T) {
 	keyPath := filepath.Join(dir, "vaults", "tv", "keys", "bob.enc")
 	if _, err := os.Stat(keyPath); err == nil {
 		t.Error("orphaned vault key should have been cleaned up after members write failure")
+	}
+}
+
+func TestAcceptLogsPendingInviteDeletionFailure(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token, err := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+
+	// Make the pending directory read-only so invite deletion fails
+	pendingDir := filepath.Join(dir, "vaults", "tv", "pending")
+	if err := os.Chmod(pendingDir, 0500); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	defer os.Chmod(pendingDir, 0700)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	// Accept should succeed (invite deletion is non-fatal)
+	if err := mgr.Accept("tv", "bob", token, bobAg, bobPub); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	// But a warning should have been logged
+	if !strings.Contains(logBuf.String(), "failed to delete pending invite") {
+		t.Errorf("expected warning about pending invite deletion failure, got: %q", logBuf.String())
 	}
 }
 
