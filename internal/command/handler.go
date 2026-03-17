@@ -130,6 +130,7 @@ func (h *Handler) handleGet(sess ssh.Session, username string, pubKey gossh.Publ
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
+	defer crypto.Zeroize(plaintext)
 
 	_, err = sess.Write(plaintext)
 	return err
@@ -143,6 +144,7 @@ func (h *Handler) handleSet(sess ssh.Session, username string, pubKey gossh.Publ
 	defer cleanup()
 
 	var plaintext []byte
+	defer func() { crypto.Zeroize(plaintext) }()
 
 	if isTerminal(sess) {
 		// PTY session: prompt with echo concealment and double-confirm
@@ -256,6 +258,7 @@ func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh
 	if err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
+	defer crypto.Zeroize(plaintext)
 
 	_, err = sess.Write(plaintext)
 	return err
@@ -273,6 +276,7 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 	}
 
 	var plaintext []byte
+	defer func() { crypto.Zeroize(plaintext) }()
 	if isTerminal(sess) {
 		plaintext, err = promptSecret(sess, h.readLineTimeout)
 		if err != nil {
@@ -530,6 +534,7 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 
 	// Read the source secret
 	var plaintext []byte
+	defer func() { crypto.Zeroize(plaintext) }()
 	if cmd.Vault != "" {
 		// Source is a vault
 		if !h.vaultMgr.HasAccess(cmd.Vault, username) {
