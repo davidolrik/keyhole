@@ -356,6 +356,10 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		m.store.DeleteVaultKey(name, username)
 		return fmt.Errorf("read members: %w", err)
 	}
+	if _, exists := members[username]; exists {
+		m.store.DeleteVaultKey(name, username)
+		return fmt.Errorf("user %q is already a member of vault %q", username, name)
+	}
 	members[username] = RoleMember
 	membersJSON, err := json.Marshal(members)
 	if err != nil {

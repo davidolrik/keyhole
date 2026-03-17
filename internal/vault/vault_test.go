@@ -880,6 +880,47 @@ func TestDestroyConcurrentWithAccept(t *testing.T) {
 	wg.Wait()
 }
 
+func TestAcceptRejectsExistingMember(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+	aliceAg, alicePub := newTestAgent(t)
+	bobAg, bobPub := newTestAgent(t)
+
+	mgr := vault.NewManager(store, []byte("server-secret"))
+	if err := mgr.Create("tv", "alice", aliceAg, alicePub); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Invite and accept bob
+	token, _ := mgr.Invite("tv", "alice", "bob", aliceAg, alicePub)
+	if err := mgr.Accept("tv", "bob", token, bobAg, bobPub); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	// Promote bob to admin
+	if err := mgr.Promote("tv", "alice", "bob"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	// Manually create a pending invite file for bob (simulating edge case)
+	inviteData := []byte(`{"wrapped_key":"AAAA","created":"` + time.Now().UTC().Format(time.RFC3339) + `"}`)
+	if err := store.WritePendingInvite("tv", "bob", inviteData); err != nil {
+		t.Fatalf("WritePendingInvite: %v", err)
+	}
+
+	// Accept should fail because bob is already a member
+	err := mgr.Accept("tv", "bob", "dummy-token", bobAg, bobPub)
+	if err == nil {
+		t.Error("Accept should reject existing member")
+	}
+
+	// Bob should still be admin (not downgraded)
+	members, _ := mgr.Members("tv")
+	if members["bob"] != vault.RoleAdmin {
+		t.Errorf("bob role = %q, want admin (should not be downgraded)", members["bob"])
+	}
+}
+
 func TestRevokeNonMemberFails(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)
