@@ -973,10 +973,20 @@ func generateInviteCode() (string, error) {
 	return "kh_" + hex.EncodeToString(b), nil
 }
 
-// validateUsername rejects usernames with path-unsafe characters.
+// reservedUsernames are names that conflict with internal data directory
+// structure and cannot be used as usernames.
+var reservedUsernames = map[string]bool{
+	"vaults":  true,
+	"invites": true,
+}
+
+// validateUsername rejects usernames with path-unsafe characters or reserved names.
 func validateUsername(username string) error {
 	if username == "" {
 		return fmt.Errorf("username cannot be empty")
+	}
+	if reservedUsernames[username] {
+		return fmt.Errorf("username %q is reserved", username)
 	}
 	for _, c := range username {
 		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {

@@ -411,6 +411,22 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
+func TestReservedUsernamesRejected(t *testing.T) {
+	reserved := []string{"vaults", "invites"}
+	for _, name := range reserved {
+		t.Run(name, func(t *testing.T) {
+			// Reserved usernames should be rejected during registration
+			_, err := command.Parse([]string{"vault", "invite", "tv", name})
+			if err == nil {
+				t.Fatalf("expected error for reserved username %q", name)
+			}
+			if !strings.Contains(err.Error(), "reserved") {
+				t.Errorf("error = %q, expected to mention 'reserved'", err)
+			}
+		})
+	}
+}
+
 func TestParsePathNormalization(t *testing.T) {
 	// Paths with redundant slashes should be cleaned
 	got, err := command.Parse([]string{"get", "account//github"})
