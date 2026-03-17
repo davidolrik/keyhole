@@ -3,6 +3,7 @@ package audit_test
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -273,13 +274,16 @@ func TestLogRotationErrorReturned(t *testing.T) {
 	}
 	f.Close()
 
-	// Create audit.log.1 as a directory so os.Rename fails
-	rotatedPath := logPath + ".1"
-	if err := os.Mkdir(rotatedPath, 0700); err != nil {
-		t.Fatal(err)
+	// Create non-empty directories at all rotation slots so the shift
+	// loop cannot move any of them, leaving .1 in place and blocking
+	// the final rename of audit.log → audit.log.1.
+	for i := 1; i <= 5; i++ {
+		d := fmt.Sprintf("%s.%d", logPath, i)
+		if err := os.Mkdir(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(d, "blocker"), []byte("x"), 0600)
 	}
-	// Put a file inside so the directory isn't empty (can't be overwritten by rename)
-	os.WriteFile(filepath.Join(rotatedPath, "blocker"), []byte("x"), 0600)
 
 	// NewLogger should return an error because rotation failed
 	_, err = audit.NewLogger(dir)

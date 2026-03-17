@@ -9,6 +9,7 @@ import (
 )
 
 const maxLogSize = 10 * 1024 * 1024 // 10MB
+const maxRotatedLogs = 5
 
 // Logger writes structured audit events to {dataDir}/audit.log as JSON.
 // All methods are goroutine-safe.
@@ -22,8 +23,11 @@ type Logger struct {
 func NewLogger(dataDir string) (*Logger, error) {
 	path := filepath.Join(dataDir, "audit.log")
 
-	// Rotate if the log has grown too large.
+	// Rotate if the log has grown too large, keeping up to maxRotatedLogs backups.
 	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
+		for i := maxRotatedLogs - 1; i >= 1; i-- {
+			os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1))
+		}
 		if err := os.Rename(path, path+".1"); err != nil {
 			log.Printf("WARNING: audit log rotation failed: %v", err)
 			return nil, fmt.Errorf("audit log rotation failed: %w", err)
