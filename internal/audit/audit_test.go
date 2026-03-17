@@ -292,6 +292,46 @@ func TestLogRotationErrorReturned(t *testing.T) {
 	}
 }
 
+func TestLogCommandWithAttrs(t *testing.T) {
+	dir := t.TempDir()
+	lg, _ := audit.NewLogger(dir)
+	lg.Command("alice", "10.0.0.1:9999", "move", "db/password", nil,
+		"source_vault", "teamvault",
+		"target_path", "production/db",
+		"target_vault", "ops")
+
+	entry := lastEntryRaw(t, filepath.Join(dir, "audit.log"))
+	if entry["op"] != "move" {
+		t.Errorf("op = %q, want move", entry["op"])
+	}
+	if entry["path"] != "db/password" {
+		t.Errorf("path = %q, want db/password", entry["path"])
+	}
+	if entry["source_vault"] != "teamvault" {
+		t.Errorf("source_vault = %q, want teamvault", entry["source_vault"])
+	}
+	if entry["target_path"] != "production/db" {
+		t.Errorf("target_path = %q, want production/db", entry["target_path"])
+	}
+	if entry["target_vault"] != "ops" {
+		t.Errorf("target_vault = %q, want ops", entry["target_vault"])
+	}
+}
+
+// lastEntryRaw returns the last log entry as a raw map for testing dynamic keys.
+func lastEntryRaw(t *testing.T, path string) map[string]any {
+	t.Helper()
+	lines := allLines(t, path)
+	if len(lines) == 0 {
+		t.Fatal("audit.log is empty")
+	}
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &entry); err != nil {
+		t.Fatalf("failed to parse JSON log line: %v\nline: %s", err, lines[len(lines)-1])
+	}
+	return entry
+}
+
 // lastEntry returns the last log entry parsed from the audit log.
 func lastEntry(t *testing.T, path string) logEntry {
 	t.Helper()

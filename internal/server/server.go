@@ -329,7 +329,17 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 	}
 
 	cmdErr := handler.Handle(sess, username, sshPubKey, cmd)
-	s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, cmdErr)
+	var auditAttrs []any
+	if cmd.Op == command.OpMove {
+		if cmd.Vault != "" {
+			auditAttrs = append(auditAttrs, "source_vault", cmd.Vault)
+		}
+		auditAttrs = append(auditAttrs, "target_path", cmd.TargetPath)
+		if cmd.TargetVault != "" {
+			auditAttrs = append(auditAttrs, "target_vault", cmd.TargetVault)
+		}
+	}
+	s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, cmdErr, auditAttrs...)
 	if cmdErr != nil {
 		errorf("%s", sanitizeError(cmdErr))
 		sess.Exit(1)

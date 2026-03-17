@@ -116,24 +116,22 @@ func (lg *Logger) VaultOpDenied(op, actor, remote, vaultName, reason string, att
 }
 
 // Command logs the result of an executed command.
-func (lg *Logger) Command(username, remote, op, path string, err error) {
+// Optional key-value attrs are appended to the log entry (e.g. move target).
+func (lg *Logger) Command(username, remote, op, path string, err error, attrs ...any) {
+	args := []any{
+		"user", username,
+		"remote", remote,
+		"op", op,
+		"path", path,
+	}
 	if err == nil {
-		lg.l.Info("command",
-			"user", username,
-			"remote", remote,
-			"op", op,
-			"path", path,
-			"result", "ok",
-		)
+		args = append(args, "result", "ok")
+		args = append(args, attrs...)
+		lg.l.Info("command", args...)
 	} else {
-		lg.l.Error("command",
-			"user", username,
-			"remote", remote,
-			"op", op,
-			"path", path,
-			"result", "error",
-			"err", sanitizeLogValue(err.Error()),
-		)
+		args = append(args, "result", "error", "err", sanitizeLogValue(err.Error()))
+		args = append(args, attrs...)
+		lg.l.Error("command", args...)
 	}
 }
 
