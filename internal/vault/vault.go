@@ -113,7 +113,8 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 		return fmt.Errorf("wrap vault key: %w", err)
 	}
 
-	// Write metadata
+	// Write metadata, members, and vault key. Roll back the entire vault
+	// directory on failure to avoid leaving partial state on disk.
 	meta := vaultMeta{
 		Owner:   username,
 		Created: time.Now().UTC().Format(time.RFC3339),
@@ -126,18 +127,19 @@ func (m *Manager) Create(name, username string, ag agent.ExtendedAgent, pubKey s
 		return fmt.Errorf("write meta: %w", err)
 	}
 
-	// Write members
 	members := map[string]Role{username: RoleOwner}
 	membersJSON, err := json.Marshal(members)
 	if err != nil {
+		m.store.DeleteVault(name)
 		return fmt.Errorf("marshal members: %w", err)
 	}
 	if err := m.store.WriteVaultMembers(name, membersJSON); err != nil {
+		m.store.DeleteVault(name)
 		return fmt.Errorf("write members: %w", err)
 	}
 
-	// Write wrapped vault key
 	if err := m.store.WriteVaultKey(name, username, wrappedKey); err != nil {
+		m.store.DeleteVault(name)
 		return fmt.Errorf("write vault key: %w", err)
 	}
 
