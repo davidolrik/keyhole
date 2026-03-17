@@ -1210,6 +1210,20 @@ func TestExpiredInviteCodeRejected(t *testing.T) {
 	}
 }
 
+func TestSanitizedErrorMessages(t *testing.T) {
+	addr, alice := testServerSetup(t)
+
+	// Try to get a nonexistent secret — error should not leak internal details
+	out, err := sshRun(t, addr, alice.cfg, alice.ag, "get nonexistent/secret")
+	if err == nil {
+		t.Fatal("expected error getting nonexistent secret")
+	}
+	// The output should contain a sanitized error, not the full wrapped chain
+	if strings.Contains(out, ".enc") || strings.Contains(out, "no such file") {
+		t.Errorf("error message leaks internal details: %q", out)
+	}
+}
+
 func TestAuditLogRegistration(t *testing.T) {
 	addr, alice := testServerSetup(t)
 

@@ -218,11 +218,21 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 	cmdErr := handler.Handle(sess, username, sshPubKey, cmd)
 	s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, cmdErr)
 	if cmdErr != nil {
-		errorf("%v", cmdErr)
+		errorf("%s", sanitizeError(cmdErr))
 		sess.Exit(1)
 		return
 	}
 	sess.Exit(0)
+}
+
+// sanitizeError returns only the outermost error message, stripping wrapped
+// internal details that could leak implementation information to SSH clients.
+func sanitizeError(err error) string {
+	msg := err.Error()
+	if idx := strings.Index(msg, ": "); idx != -1 {
+		return msg[:idx]
+	}
+	return msg
 }
 
 // loadOrGenerateHostKey loads an Ed25519 host key from path, generating one if absent.
