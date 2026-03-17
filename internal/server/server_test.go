@@ -1689,6 +1689,49 @@ func TestValidServerSecretAccepted(t *testing.T) {
 	}
 }
 
+func TestSymlinkedAuthorizedKeysRejected(t *testing.T) {
+	dataDir := t.TempDir()
+	alice := newTestUser(t, "alice")
+
+	cfg := server.Config{DataDir: dataDir, Admins: []string{"alice"}}
+	srv, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	// Set up alice's key normally first
+	if err := srv.AddUserKey("alice", alice.sshPub); err != nil {
+		t.Fatalf("AddUserKey: %v", err)
+	}
+
+	// Replace authorized_keys with a symlink
+	authKeysPath := filepath.Join(dataDir, "alice", ".ssh", "authorized_keys")
+	tmpFile := filepath.Join(dataDir, "real_keys")
+	data, err := os.ReadFile(authKeysPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	os.Remove(authKeysPath)
+	if err := os.Symlink(tmpFile, authKeysPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	go srv.Serve(ln)
+	t.Cleanup(func() { ln.Close() })
+	time.Sleep(10 * time.Millisecond)
+
+	// Alice should not be able to run commands (key not verified due to symlink)
+	_, err = sshRun(t, addr, alice.cfg, alice.ag, "help")
+	if err == nil {
+		t.Error("expected error when authorized_keys is a symlink")
+	}
+}
+
 func TestEmptyServerSecretFileRejected(t *testing.T) {
 	dataDir := t.TempDir()
 

@@ -173,6 +173,11 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	// when it matches. Unregistered users and wrong-key users both get
 	// through auth identically — the session handler enforces access.
 	authKeysPath := filepath.Join(s.cfg.DataDir, username, ".ssh", "authorized_keys")
+	if isSymlink(filepath.Join(s.cfg.DataDir, username, ".ssh")) || isSymlink(authKeysPath) {
+		log.Printf("auth: symlink detected in authorized_keys path for %q", username)
+		s.auditLog.AuthDenied(username, remote, "symlink detected in authorized_keys path")
+		return false
+	}
 	data, err := os.ReadFile(authKeysPath)
 	if err == nil && checkAuthorizedKeys(data, key) {
 		ctx.SetValue(keyVerifiedKey, true)
@@ -185,6 +190,15 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 
 	s.auditLog.Connect(username, remote, gossh.FingerprintSHA256(key))
 	return true
+}
+
+// isSymlink reports whether path is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
 }
 
 // checkAuthorizedKeys reports whether key is listed in the authorized_keys data.
