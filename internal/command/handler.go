@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -696,7 +697,9 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	if len(inviteData) > 0 {
 		created, err := time.Parse(time.RFC3339, string(inviteData))
 		if err == nil && time.Since(created) > inviteCodeTTL {
-			os.Remove(invitePath)
+			if rmErr := os.Remove(invitePath); rmErr != nil {
+				log.Printf("WARNING: failed to remove expired invite %s: %v", invitePath, rmErr)
+			}
 			return fmt.Errorf("invalid or expired invite code")
 		}
 	}
