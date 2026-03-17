@@ -235,6 +235,9 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault invite requires <name> <user>")
 		}
+		if err := validateUsername(subArgs[1]); err != nil {
+			return Command{}, fmt.Errorf("target user: %w", err)
+		}
 		return Command{Op: OpVaultInvite, Vault: subArgs[0], TargetUser: subArgs[1]}, nil
 
 	case "accept":
@@ -247,11 +250,17 @@ func parseVaultSubcommand(args []string) (Command, error) {
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault promote requires <name> <user>")
 		}
+		if err := validateUsername(subArgs[1]); err != nil {
+			return Command{}, fmt.Errorf("target user: %w", err)
+		}
 		return Command{Op: OpVaultPromote, Vault: subArgs[0], TargetUser: subArgs[1]}, nil
 
 	case "demote":
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault demote requires <name> <user>")
+		}
+		if err := validateUsername(subArgs[1]); err != nil {
+			return Command{}, fmt.Errorf("target user: %w", err)
 		}
 		return Command{Op: OpVaultDemote, Vault: subArgs[0], TargetUser: subArgs[1]}, nil
 
@@ -276,6 +285,9 @@ func parseVaultSubcommand(args []string) (Command, error) {
 	case "revoke":
 		if len(subArgs) != 2 {
 			return Command{}, fmt.Errorf("vault revoke requires <name> <user>")
+		}
+		if err := validateUsername(subArgs[1]); err != nil {
+			return Command{}, fmt.Errorf("target user: %w", err)
 		}
 		return Command{Op: OpVaultRevoke, Vault: subArgs[0], TargetUser: subArgs[1]}, nil
 

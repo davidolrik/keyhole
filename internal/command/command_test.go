@@ -278,6 +278,26 @@ func TestParseVaultSyntax(t *testing.T) {
 			argv:    []string{"get", "v:a:u:lt:secret"},
 			wantErr: true,
 		},
+		{
+			name:    "vault invite target user with slash rejected",
+			argv:    []string{"vault", "invite", "tv", "../admin"},
+			wantErr: true,
+		},
+		{
+			name:    "vault promote target user with dot rejected",
+			argv:    []string{"vault", "promote", "tv", ".hidden"},
+			wantErr: true,
+		},
+		{
+			name:    "vault demote target user with backslash rejected",
+			argv:    []string{"vault", "demote", "tv", "user\\name"},
+			wantErr: true,
+		},
+		{
+			name:    "vault revoke target user with null rejected",
+			argv:    []string{"vault", "revoke", "tv", "user\x00name"},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
