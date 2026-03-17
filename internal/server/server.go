@@ -385,7 +385,7 @@ func resolveServerSecret(configValue, path string) ([]byte, error) {
 
 // loadOrGenerateServerSecret loads the server secret from path, generating one if absent.
 func loadOrGenerateServerSecret(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -401,6 +401,15 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 		return []byte(secret), nil
 	}
 
+	mode := info.Mode().Perm()
+	if mode&0077 != 0 {
+		return nil, fmt.Errorf("server secret file %s has permission %04o; must not be group- or world-readable (try: chmod 600 %s)", path, mode, path)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 	secret := []byte(strings.TrimSpace(string(data)))
 	if len(secret) < minServerSecretLength {
 		return nil, fmt.Errorf("server secret in %s must be at least %d characters", path, minServerSecretLength)
