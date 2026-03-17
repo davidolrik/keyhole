@@ -3,7 +3,9 @@ package cmd
 import (
 	"log"
 	"net"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -88,5 +90,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	log.Printf("keyhole listening on %s", cfg.Listen)
 
-	return srv.Serve(ln)
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down...")
+		srv.Close()
+	}()
+
+	err = srv.Serve(ln)
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
 }

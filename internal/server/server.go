@@ -157,6 +157,15 @@ func (s *Server) ListenAndServe() error {
 	return s.sshSrv.ListenAndServe()
 }
 
+// Close stops accepting connections and closes the audit log.
+func (s *Server) Close() error {
+	err := s.sshSrv.Close()
+	if closeErr := s.auditLog.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
+}
+
 // publicKeyHandler authenticates a connecting client.
 // Only Ed25519 keys are accepted. All Ed25519 keys are allowed through to
 // prevent username enumeration — the session handler restricts unverified
