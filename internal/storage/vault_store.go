@@ -25,7 +25,7 @@ func (s *FileStore) WriteVaultSecret(vault, secretPath string, ciphertext []byte
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, ciphertext, 0600)
+	return WriteFileNoFollow(fpath, ciphertext, 0600)
 }
 
 // ReadVaultSecret reads an encrypted secret from a vault.
@@ -88,7 +88,7 @@ func (s *FileStore) WriteVaultMeta(vault string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, data, 0600)
+	return WriteFileNoFollow(fpath, data, 0600)
 }
 
 // ReadVaultMeta reads the vault metadata.
@@ -103,7 +103,7 @@ func (s *FileStore) WriteVaultMembers(vault string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, data, 0600)
+	return WriteFileNoFollow(fpath, data, 0600)
 }
 
 // ReadVaultMembers reads the vault members file.
@@ -118,7 +118,7 @@ func (s *FileStore) WriteVaultKey(vault, username string, wrappedKey []byte) err
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, wrappedKey, 0600)
+	return WriteFileNoFollow(fpath, wrappedKey, 0600)
 }
 
 // ReadVaultKey reads a user's wrapped vault key.
@@ -145,7 +145,7 @@ func (s *FileStore) WritePendingInvite(vault, username string, data []byte) erro
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, data, 0600)
+	return WriteFileNoFollow(fpath, data, 0600)
 }
 
 // ReadPendingInvite reads a pending invite for a user.

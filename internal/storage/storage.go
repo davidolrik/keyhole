@@ -45,7 +45,7 @@ func (s *FileStore) Write(username, secretPath string, ciphertext []byte) error 
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	return writeFileNoFollow(fpath, ciphertext, 0600)
+	return WriteFileNoFollow(fpath, ciphertext, 0600)
 }
 
 // Read returns the raw ciphertext for the given username and path.
@@ -115,10 +115,10 @@ func (s *FileStore) filePath(username, secretPath string) string {
 	return filepath.Join(s.secretRoot(username), filepath.FromSlash(secretPath)+".enc")
 }
 
-// writeFileNoFollow creates or truncates a file with O_NOFOLLOW to atomically
+// WriteFileNoFollow creates or truncates a file with O_NOFOLLOW to atomically
 // prevent symlink traversal, eliminating the TOCTOU race between a symlink
 // check and the subsequent write.
-func writeFileNoFollow(path string, data []byte, perm os.FileMode) error {
+func WriteFileNoFollow(path string, data []byte, perm os.FileMode) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, perm)
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {

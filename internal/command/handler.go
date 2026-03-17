@@ -663,7 +663,7 @@ func (h *Handler) handleInvite(sess ssh.Session, username string) error {
 	}
 
 	invitePath := filepath.Join(inviteDir, code)
-	if err := os.WriteFile(invitePath, []byte(time.Now().UTC().Format(time.RFC3339)), 0600); err != nil {
+	if err := storage.WriteFileNoFollow(invitePath, []byte(time.Now().UTC().Format(time.RFC3339)), 0600); err != nil {
 		return fmt.Errorf("write invite: %w", err)
 	}
 

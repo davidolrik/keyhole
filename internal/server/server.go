@@ -143,7 +143,7 @@ func (s *Server) AddUserKey(username string, pubKey gossh.PublicKey) error {
 		return fmt.Errorf("symlink detected at authorized_keys for %q", username)
 	}
 	line := gossh.MarshalAuthorizedKey(pubKey)
-	return os.WriteFile(authKeysPath, line, 0600)
+	return storage.WriteFileNoFollow(authKeysPath, line, 0600)
 }
 
 // Serve accepts connections on the given listener.
@@ -354,7 +354,7 @@ func loadOrGenerateHostKey(path string) (gossh.Signer, error) {
 			return nil, fmt.Errorf("marshal host key: %w", err)
 		}
 		pemBytes := pem.EncodeToMemory(pemBlock)
-		if err := os.WriteFile(path, pemBytes, 0600); err != nil {
+		if err := storage.WriteFileNoFollow(path, pemBytes, 0600); err != nil {
 			return nil, fmt.Errorf("write host key: %w", err)
 		}
 		data = pemBytes
@@ -397,7 +397,7 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("generate server secret: %w", err)
 		}
-		if err := os.WriteFile(path, []byte(secret), 0600); err != nil {
+		if err := storage.WriteFileNoFollow(path, []byte(secret), 0600); err != nil {
 			return nil, fmt.Errorf("write server secret: %w", err)
 		}
 		return []byte(secret), nil
