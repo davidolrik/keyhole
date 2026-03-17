@@ -686,7 +686,7 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	// prevent username enumeration: without a valid invite code, the
 	// caller learns nothing about whether the username is taken.
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
-	inviteData, err := os.ReadFile(invitePath)
+	inviteData, err := storage.ReadFileNoFollow(invitePath, maxSecretSize)
 	if err != nil {
 		// Perform equivalent work to the expiration check below so that
 		// "file not found" and "file found but expired" take similar time,

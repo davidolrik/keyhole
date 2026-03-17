@@ -148,10 +148,14 @@ func removeNoFollow(path string) error {
 	return os.Remove(path)
 }
 
-// readFileNoFollow opens a file with O_NOFOLLOW to atomically prevent symlink
+// ReadFileNoFollow opens a file with O_NOFOLLOW to atomically prevent symlink
 // traversal, then reads its contents using a LimitedReader to enforce maxSize
 // without a separate stat call. This eliminates TOCTOU races between symlink
 // checks and file reads, and between size checks and file reads.
+func ReadFileNoFollow(path string, maxSize int64) ([]byte, error) {
+	return readFileNoFollow(path, maxSize)
+}
+
 func readFileNoFollow(path string, maxSize int64) ([]byte, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
