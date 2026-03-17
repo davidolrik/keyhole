@@ -977,8 +977,11 @@ func promptSecret(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 		fmt.Fprintln(sess)
 
 		if string(first) == string(second) {
+			crypto.Zeroize(second)
 			return first, nil
 		}
+		crypto.Zeroize(first)
+		crypto.Zeroize(second)
 		fmt.Fprintln(sess, "Secrets do not match. Try again.")
 	}
 	return nil, fmt.Errorf("too many failed attempts")
