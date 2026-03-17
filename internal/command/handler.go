@@ -372,6 +372,9 @@ func (h *Handler) handleVaultInvite(sess ssh.Session, username string, pubKey go
 
 	token, err := h.vaultMgr.Invite(vaultName, username, targetUser, ag, pubKey)
 	if err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("invite", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
+		}
 		return fmt.Errorf("vault invite: %w", err)
 	}
 
@@ -402,6 +405,9 @@ func (h *Handler) handleVaultAccept(sess ssh.Session, username string, pubKey go
 
 func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targetUser string) error {
 	if err := h.vaultMgr.Promote(vaultName, username, targetUser); err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("promote", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
+		}
 		return fmt.Errorf("vault promote: %w", err)
 	}
 
@@ -414,6 +420,9 @@ func (h *Handler) handleVaultPromote(sess ssh.Session, username, vaultName, targ
 
 func (h *Handler) handleVaultDemote(sess ssh.Session, username, vaultName, targetUser string) error {
 	if err := h.vaultMgr.Demote(vaultName, username, targetUser); err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("demote", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
+		}
 		return fmt.Errorf("vault demote: %w", err)
 	}
 
@@ -426,6 +435,9 @@ func (h *Handler) handleVaultDemote(sess ssh.Session, username, vaultName, targe
 
 func (h *Handler) handleVaultRevoke(sess ssh.Session, username, vaultName, targetUser string) error {
 	if err := h.vaultMgr.Revoke(vaultName, username, targetUser); err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("revoke", username, sess.RemoteAddr().String(), vaultName, err.Error(), "target", targetUser)
+		}
 		return fmt.Errorf("vault revoke: %w", err)
 	}
 
@@ -484,6 +496,9 @@ func (h *Handler) handleVaultDestroy(sess ssh.Session, username, vaultName strin
 	}
 
 	if err := h.vaultMgr.Destroy(vaultName, username); err != nil {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("destroy", username, sess.RemoteAddr().String(), vaultName, err.Error())
+		}
 		return fmt.Errorf("destroy vault: %w", err)
 	}
 

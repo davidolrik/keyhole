@@ -69,6 +69,18 @@ func (lg *Logger) VaultOp(op, actor, remote, vaultName string, attrs ...any) {
 	lg.l.Info("vault_"+op, args...)
 }
 
+// VaultOpDenied logs a failed vault operation (permission denied, etc.).
+func (lg *Logger) VaultOpDenied(op, actor, remote, vaultName, reason string, attrs ...any) {
+	args := []any{
+		"actor", actor,
+		"remote", remote,
+		"vault", vaultName,
+		"reason", reason,
+	}
+	args = append(args, attrs...)
+	lg.l.Warn("vault_"+op+"_denied", args...)
+}
+
 // Command logs the result of an executed command.
 func (lg *Logger) Command(username, remote, op, path string, err error) {
 	if err == nil {

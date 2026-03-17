@@ -23,6 +23,9 @@ type logEntry struct {
 	Result string `json:"result"`
 	Err    string `json:"err"`
 	Reason string `json:"reason"`
+	Actor  string `json:"actor"`
+	Vault  string `json:"vault"`
+	Target string `json:"target"`
 }
 
 func TestLogFileCreated(t *testing.T) {
@@ -160,6 +163,32 @@ func TestLogIsConcurrentlySafe(t *testing.T) {
 	lines := allLines(t, filepath.Join(dir, "audit.log"))
 	if len(lines) != 20 {
 		t.Errorf("expected 20 lines, got %d", len(lines))
+	}
+}
+
+func TestLogVaultOpDenied(t *testing.T) {
+	dir := t.TempDir()
+	lg, _ := audit.NewLogger(dir)
+	lg.VaultOpDenied("promote", "mallory", "1.2.3.4:5678", "teamvault", "permission denied", "target", "alice")
+
+	entry := lastEntry(t, filepath.Join(dir, "audit.log"))
+	if entry.Msg != "vault_promote_denied" {
+		t.Errorf("msg = %q, want vault_promote_denied", entry.Msg)
+	}
+	if entry.Actor != "mallory" {
+		t.Errorf("actor = %q, want mallory", entry.Actor)
+	}
+	if entry.Vault != "teamvault" {
+		t.Errorf("vault = %q, want teamvault", entry.Vault)
+	}
+	if entry.Reason != "permission denied" {
+		t.Errorf("reason = %q, want 'permission denied'", entry.Reason)
+	}
+	if entry.Target != "alice" {
+		t.Errorf("target = %q, want alice", entry.Target)
+	}
+	if entry.Level != "WARN" {
+		t.Errorf("level = %q, want WARN", entry.Level)
 	}
 }
 
