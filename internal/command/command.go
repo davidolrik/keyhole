@@ -358,6 +358,9 @@ func validateVaultRef(name string) error {
 	if len(name) > maxVaultNameLength {
 		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
 	}
+	if strings.HasPrefix(name, "_") {
+		return fmt.Errorf("vault names starting with '_' are reserved")
+	}
 	for _, c := range name {
 		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' ||
 			c == '*' || c == '?' || c == '[' || c == ']' {
