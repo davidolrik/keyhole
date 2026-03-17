@@ -579,7 +579,8 @@ func ValidateVaultName(name string) error {
 		return fmt.Errorf("vault names starting with '_' are reserved")
 	}
 	for _, c := range name {
-		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' {
+		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' ||
+			c == '*' || c == '?' || c == '[' || c == ']' {
 			return fmt.Errorf("vault name contains invalid character %q", c)
 		}
 	}

@@ -320,6 +320,26 @@ func TestParseVaultSyntax(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "vault create with wildcard star",
+			argv:    []string{"vault", "create", "test*"},
+			wantErr: true,
+		},
+		{
+			name:    "vault create with wildcard question",
+			argv:    []string{"vault", "create", "test?"},
+			wantErr: true,
+		},
+		{
+			name:    "vault create with bracket",
+			argv:    []string{"vault", "create", "test[a]"},
+			wantErr: true,
+		},
+		{
+			name:    "get with wildcard in vault ref",
+			argv:    []string{"get", "te*st:secret"},
+			wantErr: true,
+		},
+		{
 			name:    "vault no subcommand",
 			argv:    []string{"vault"},
 			wantErr: true,
