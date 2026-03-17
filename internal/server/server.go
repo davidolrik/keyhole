@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -38,6 +39,7 @@ const (
 	defaultIdleTimeout     = 60 * time.Second
 	defaultMaxTimeout      = 5 * time.Minute
 	defaultReadLineTimeout = 90 * time.Second
+	defaultMaxConnections  = 256
 )
 
 // Config holds the runtime configuration for the server.
@@ -49,6 +51,7 @@ type Config struct {
 	Version         string
 	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (10)
 	ReadLineTimeout time.Duration // timeout for reading a line of input; 0 = default (60s)
+	MaxConnections  int           // max concurrent SSH connections; 0 = default (256)
 }
 
 // Server is the keyhole SSH server.
@@ -61,6 +64,7 @@ type Server struct {
 	hostKey      gossh.Signer
 	auditLog     *audit.Logger
 	connLimiter  *rateLimiter
+	connSem      chan struct{} // semaphore to limit concurrent connections
 }
 
 // New creates a new Server, initializing host key and server secret on first run.
@@ -102,6 +106,11 @@ func New(cfg Config) (*Server, error) {
 		connLimit = defaultConnRateLimit
 	}
 
+	maxConns := cfg.MaxConnections
+	if maxConns == 0 {
+		maxConns = defaultMaxConnections
+	}
+
 	s := &Server{
 		cfg:          cfg,
 		store:        store,
@@ -110,12 +119,23 @@ func New(cfg Config) (*Server, error) {
 		hostKey:      hostKey,
 		auditLog:     auditLog,
 		connLimiter:  newRateLimiter(connLimit, time.Minute),
+		connSem:      make(chan struct{}, maxConns),
 	}
 
 	sshSrv := &ssh.Server{
 		IdleTimeout: defaultIdleTimeout,
 		MaxTimeout:  defaultMaxTimeout,
 		HostSigners: []ssh.Signer{hostKey},
+		ConnCallback: func(ctx ssh.Context, conn net.Conn) net.Conn {
+			select {
+			case s.connSem <- struct{}{}:
+				return &limitedConn{Conn: conn, sem: s.connSem}
+			default:
+				log.Printf("connection rejected: max connections (%d) reached", maxConns)
+				conn.Close()
+				return nil
+			}
+		},
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			return s.publicKeyHandler(ctx, key)
 		},
@@ -439,6 +459,19 @@ func isValidUsername(username string) bool {
 		}
 	}
 	return true
+}
+
+// limitedConn wraps a net.Conn and releases a semaphore slot on Close.
+type limitedConn struct {
+	net.Conn
+	sem  chan struct{}
+	once sync.Once
+}
+
+func (c *limitedConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(func() { <-c.sem })
+	return err
 }
 
 // generateAlphanumericSecret returns a cryptographically random alphanumeric string of the given length.
