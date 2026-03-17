@@ -1418,6 +1418,36 @@ func TestAuditLogVaultOperations(t *testing.T) {
 	}
 }
 
+func TestAuditLogVaultAccessDenied(t *testing.T) {
+	addr, dataDir, alice, bob := testServerSetupMultiUser(t)
+
+	sshRun(t, addr, alice.cfg, alice.ag, "vault create denied-test")
+
+	// Bob is not a member — attempts should produce VaultOpDenied entries
+	sshRun(t, addr, bob.cfg, bob.ag, "get denied-test:secret")
+	sshRun(t, addr, bob.cfg, bob.ag, "list denied-test:")
+
+	logPath := filepath.Join(dataDir, "audit.log")
+	lines := readLines(t, logPath)
+
+	checks := map[string]bool{
+		"vault_get_denied":  false,
+		"vault_list_denied": false,
+	}
+	for _, l := range lines {
+		for op := range checks {
+			if strings.Contains(l, `"msg":"`+op+`"`) {
+				checks[op] = true
+			}
+		}
+	}
+	for op, found := range checks {
+		if !found {
+			t.Errorf("no %s event in audit log", op)
+		}
+	}
+}
+
 func TestAuditLogInviteGenerated(t *testing.T) {
 	addr, dataDir, alice := testServerSetup(t)
 

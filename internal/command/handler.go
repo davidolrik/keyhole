@@ -240,6 +240,9 @@ func (h *Handler) handleVaultGet(sess ssh.Session, username string, pubKey gossh
 	defer cleanup()
 
 	if !h.vaultMgr.HasAccess(vaultName, username) {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("get", username, sess.RemoteAddr().String(), vaultName, "not a member")
+		}
 		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
 	}
 
@@ -274,6 +277,9 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 	defer cleanup()
 
 	if !h.vaultMgr.HasAccess(vaultName, username) {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("set", username, sess.RemoteAddr().String(), vaultName, "not a member")
+		}
 		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
 	}
 
@@ -319,6 +325,9 @@ func (h *Handler) handleVaultSet(sess ssh.Session, username string, pubKey gossh
 
 func (h *Handler) handleVaultList(sess ssh.Session, username, vaultName, prefix string, glob bool) error {
 	if !h.vaultMgr.HasAccess(vaultName, username) {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("list", username, sess.RemoteAddr().String(), vaultName, "not a member")
+		}
 		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
 	}
 
@@ -481,6 +490,9 @@ func (h *Handler) handleVaultMembers(sess ssh.Session, username, vaultName strin
 	// HasAccess returns false for both non-existent vaults and non-members,
 	// producing a uniform error that doesn't leak vault existence.
 	if !h.vaultMgr.HasAccess(vaultName, username) {
+		if h.auditLog != nil {
+			h.auditLog.VaultOpDenied("members", username, sess.RemoteAddr().String(), vaultName, "not a member")
+		}
 		return fmt.Errorf("permission denied: not a member of vault %q", vaultName)
 	}
 
@@ -560,6 +572,9 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 	if cmd.Vault != "" {
 		// Source is a vault
 		if !h.vaultMgr.HasAccess(cmd.Vault, username) {
+			if h.auditLog != nil {
+				h.auditLog.VaultOpDenied("move", username, sess.RemoteAddr().String(), cmd.Vault, "not a member")
+			}
 			return fmt.Errorf("permission denied: not a member of vault %q", cmd.Vault)
 		}
 		vaultKey, err := h.vaultMgr.VaultKey(cmd.Vault, username, ag, pubKey)
@@ -605,6 +620,9 @@ func (h *Handler) handleMove(sess ssh.Session, username string, pubKey gossh.Pub
 
 	if cmd.TargetVault != "" {
 		if !h.vaultMgr.HasAccess(cmd.TargetVault, username) {
+			if h.auditLog != nil {
+				h.auditLog.VaultOpDenied("move", username, sess.RemoteAddr().String(), cmd.TargetVault, "not a member")
+			}
 			return fmt.Errorf("permission denied: not a member of vault %q", cmd.TargetVault)
 		}
 		members, err := h.vaultMgr.Members(cmd.TargetVault)
