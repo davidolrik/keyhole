@@ -312,11 +312,14 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 		return
 	}
 
-	// Unverified sessions (wrong key or unregistered) may only register.
-	// The same error is returned in both cases to prevent username enumeration.
+	// Unverified sessions (wrong key or unregistered) may only use
+	// allowlisted operations. Using an allowlist ensures that adding
+	// operations in the future cannot accidentally expose them to
+	// unauthenticated users.
 	verified, _ := sess.Context().Value(keyVerifiedKey).(bool)
 	if !verified {
-		if cmd.Op != command.OpRegister {
+		allowed := cmd.Op == command.OpRegister
+		if !allowed {
 			regErr := fmt.Errorf("not authorized")
 			s.auditLog.Command(username, remote, cmd.Op.String(), cmd.Path, regErr)
 			errorf("%v", regErr)
