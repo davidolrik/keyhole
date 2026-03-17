@@ -186,6 +186,13 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		return false
 	}
 
+	// Reject usernames with path-unsafe characters early to prevent
+	// directory traversal in the authorized_keys lookup below.
+	if !isValidUsername(username) {
+		s.auditLog.AuthDenied(username, remote, "invalid username")
+		return false
+	}
+
 	if key.Type() != gossh.KeyAlgoED25519 {
 		reason := "non-Ed25519 key type " + key.Type()
 		log.Printf("auth: rejecting %s for user %q", reason, username)
@@ -252,6 +259,16 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 	// CRLF conversion, causing subsequent output to appear indented.
 	errorf := func(format string, args ...any) {
 		fmt.Fprintf(sess, "error: "+format+"\n", args...)
+	}
+
+	// Reject usernames with path-unsafe characters to prevent directory
+	// traversal via the SSH username, which is used in filesystem paths
+	// before any command-level validation occurs.
+	if !isValidUsername(username) {
+		s.auditLog.AuthDenied(username, remote, "invalid username")
+		errorf("not authorized")
+		sess.Exit(1)
+		return
 	}
 
 	argv := sess.Command()
@@ -389,6 +406,21 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 		return nil, fmt.Errorf("server secret in %s must be at least %d characters", path, minServerSecretLength)
 	}
 	return secret, nil
+}
+
+// isValidUsername returns true if username contains only safe characters
+// [a-zA-Z0-9_-]. This prevents path traversal when the username is used
+// in filesystem paths.
+func isValidUsername(username string) bool {
+	if username == "" {
+		return false
+	}
+	for _, c := range username {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // generateAlphanumericSecret returns a cryptographically random alphanumeric string of the given length.
