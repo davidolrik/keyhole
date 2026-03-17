@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
@@ -437,8 +438,12 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	secret := []byte(strings.TrimSpace(string(data)))
+	// Trim whitespace in-place to avoid creating a temporary string copy
+	// that cannot be explicitly zeroed.
+	secret := bytes.TrimSpace(data)
+	crypto.Zeroize(data[len(secret):]) // zero any trailing whitespace bytes
 	if len(secret) < minServerSecretLength {
+		crypto.Zeroize(secret)
 		return nil, fmt.Errorf("server secret in %s must be at least %d characters", path, minServerSecretLength)
 	}
 	return secret, nil
