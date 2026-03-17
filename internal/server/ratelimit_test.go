@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -53,5 +54,35 @@ func TestRateLimiterResetsAfterWindow(t *testing.T) {
 
 	if !rl.allow("1.2.3.4") {
 		t.Error("should be allowed after window expires")
+	}
+}
+
+func TestRateLimiterSweepsExpiredEntries(t *testing.T) {
+	rl := newRateLimiter(2, 50*time.Millisecond)
+
+	// Generate entries from many IPs
+	for i := 0; i < 100; i++ {
+		rl.allow(fmt.Sprintf("10.0.0.%d", i))
+	}
+
+	rl.mu.Lock()
+	beforeSweep := len(rl.ips)
+	rl.mu.Unlock()
+
+	if beforeSweep != 100 {
+		t.Fatalf("expected 100 entries before sweep, got %d", beforeSweep)
+	}
+
+	// Wait for window to expire, then trigger a sweep via allow()
+	time.Sleep(60 * time.Millisecond)
+	rl.allow("trigger-sweep")
+
+	rl.mu.Lock()
+	afterSweep := len(rl.ips)
+	rl.mu.Unlock()
+
+	// Only the trigger IP should remain (all 100 old entries swept)
+	if afterSweep != 1 {
+		t.Errorf("expected 1 entry after sweep, got %d", afterSweep)
 	}
 }

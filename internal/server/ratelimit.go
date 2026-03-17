@@ -12,10 +12,11 @@ type ipEntry struct {
 
 // rateLimiter enforces a fixed-window rate limit per key (typically IP address).
 type rateLimiter struct {
-	mu     sync.Mutex
-	ips    map[string]*ipEntry
-	limit  int
-	window time.Duration
+	mu        sync.Mutex
+	ips       map[string]*ipEntry
+	limit     int
+	window    time.Duration
+	lastSweep time.Time
 }
 
 func newRateLimiter(limit int, window time.Duration) *rateLimiter {
@@ -31,6 +32,18 @@ func (rl *rateLimiter) allow(key string) bool {
 	defer rl.mu.Unlock()
 
 	now := time.Now()
+
+	// Periodically sweep expired entries to prevent unbounded memory growth
+	// from unique IPs (e.g. botnet scans). Sweep at most once per window.
+	if now.Sub(rl.lastSweep) > rl.window {
+		for k, e := range rl.ips {
+			if now.Sub(e.windowStart) > rl.window {
+				delete(rl.ips, k)
+			}
+		}
+		rl.lastSweep = now
+	}
+
 	entry, ok := rl.ips[key]
 	if !ok || now.Sub(entry.windowStart) > rl.window {
 		rl.ips[key] = &ipEntry{count: 1, windowStart: now}
