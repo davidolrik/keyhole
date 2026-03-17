@@ -732,11 +732,14 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 	invitePath := filepath.Join(h.dataDir, "invites", inviteCode)
 	inviteData, err := storage.ReadFileNoFollow(invitePath, maxSecretSize)
 	if err != nil {
-		// Perform equivalent work to the expiration check below so that
-		// "file not found" and "file found but expired" take similar time,
-		// preventing timing side-channels that reveal code existence.
-		time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
+		// Perform equivalent work to the expiration check and username-exists
+		// check below so that all rejection paths take similar time,
+		// preventing timing side-channels that reveal code existence or
+		// username availability.
+		created, _ := time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
+		time.Since(created)
 		os.Remove(invitePath) // no-op on non-existent file; matches expired-path work
+		os.Stat(filepath.Join(h.dataDir, username, ".ssh", "authorized_keys"))
 		return fmt.Errorf("invalid or expired invite code")
 	}
 	if len(inviteData) > 0 {
@@ -745,6 +748,7 @@ func (h *Handler) handleRegister(sess ssh.Session, username string, pubKey gossh
 			if rmErr := os.Remove(invitePath); rmErr != nil {
 				log.Printf("WARNING: failed to remove expired invite %s: %v", invitePath, rmErr)
 			}
+			os.Stat(filepath.Join(h.dataDir, username, ".ssh", "authorized_keys"))
 			return fmt.Errorf("invalid or expired invite code")
 		}
 	}
