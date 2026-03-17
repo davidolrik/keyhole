@@ -447,3 +447,67 @@ func TestVaultStore_ListVaults(t *testing.T) {
 		t.Errorf("ListVaults = %v, want alpha and beta", vaults)
 	}
 }
+
+func TestVaultStore_ListVaultsSkipsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Create a real vault
+	if err := store.WriteVaultMeta("real", []byte(`{"owner":"alice"}`)); err != nil {
+		t.Fatalf("WriteVaultMeta: %v", err)
+	}
+
+	// Create a symlinked vault directory pointing to the real one
+	vaultsDir := filepath.Join(dir, "vaults")
+	realVaultDir := filepath.Join(vaultsDir, "real")
+	symlinkDir := filepath.Join(vaultsDir, "evil")
+	if err := os.Symlink(realVaultDir, symlinkDir); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	vaults, err := store.ListVaults()
+	if err != nil {
+		t.Fatalf("ListVaults: %v", err)
+	}
+	for _, v := range vaults {
+		if v == "evil" {
+			t.Error("ListVaults should skip symlinked vault directories")
+		}
+	}
+	if len(vaults) != 1 {
+		t.Errorf("ListVaults = %v (len %d), want 1", vaults, len(vaults))
+	}
+}
+
+func TestVaultStore_DeleteVaultRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Create a real vault
+	if err := store.WriteVaultMeta("real", []byte(`{"owner":"alice"}`)); err != nil {
+		t.Fatalf("WriteVaultMeta: %v", err)
+	}
+
+	// Create a target directory that should not be deleted
+	targetDir := t.TempDir()
+	targetFile := filepath.Join(targetDir, "important.txt")
+	if err := os.WriteFile(targetFile, []byte("do not delete"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Replace vault dir with a symlink to the target
+	vaultPath := filepath.Join(dir, "vaults", "symvault")
+	if err := os.Symlink(targetDir, vaultPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	err := store.DeleteVault("symvault")
+	if err == nil {
+		t.Fatal("DeleteVault should reject symlinked vault directory")
+	}
+
+	// Verify the target directory was not deleted
+	if _, err := os.Stat(targetFile); err != nil {
+		t.Errorf("target file was deleted through symlink: %v", err)
+	}
+}

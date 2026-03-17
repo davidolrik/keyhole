@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -180,6 +181,12 @@ func (s *FileStore) ListVaults() ([]string, error) {
 		if !e.IsDir() {
 			continue
 		}
+		// Reject symlinked vault directories to prevent directory traversal.
+		entryPath := filepath.Join(vaultsDir, e.Name())
+		info, err := os.Lstat(entryPath)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
 		metaPath := filepath.Join(vaultsDir, e.Name(), "meta.json")
 		if _, err := os.Lstat(metaPath); err == nil {
 			vaults = append(vaults, e.Name())
@@ -189,8 +196,19 @@ func (s *FileStore) ListVaults() ([]string, error) {
 }
 
 // DeleteVault removes an entire vault directory and all its contents.
+// It rejects symlinked vault directories to prevent a TOCTOU attack
+// where the directory is replaced with a symlink between validation
+// and deletion.
 func (s *FileStore) DeleteVault(vault string) error {
-	return os.RemoveAll(s.vaultDir(vault))
+	vaultPath := s.vaultDir(vault)
+	info, err := os.Lstat(vaultPath)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("vault directory is a symlink")
+	}
+	return os.RemoveAll(vaultPath)
 }
 
 func (s *FileStore) vaultDir(vault string) string {
