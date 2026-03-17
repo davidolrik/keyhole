@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -1059,15 +1060,15 @@ func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 	}
 	ch := make(chan result, 1)
 	go func() {
-		var buf []byte
-		b := make([]byte, 1)
+		reader := bufio.NewReaderSize(sess, 4096)
+		buf := make([]byte, 0, 256)
 		for {
-			n, err := sess.Read(b)
-			if n > 0 {
-				if b[0] == '\n' || b[0] == '\r' {
+			b, err := reader.ReadByte()
+			if err == nil {
+				if b == '\n' || b == '\r' {
 					break
 				}
-				buf = append(buf, b[0])
+				buf = append(buf, b)
 				if len(buf) > maxSecretSize {
 					ch <- result{nil, fmt.Errorf("secret too large (max %d bytes)", maxSecretSize)}
 					return
