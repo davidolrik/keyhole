@@ -3,10 +3,12 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ErrNotFound is returned when a secret does not exist.
@@ -52,10 +54,7 @@ func (s *FileStore) Write(username, secretPath string, ciphertext []byte) error 
 // Read returns the raw ciphertext for the given username and path.
 func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 	fpath := s.filePath(username, secretPath)
-	if isSymlink(fpath) {
-		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
-	}
-	return readFileLimited(fpath, maxSecretFileSize)
+	return readFileNoFollow(fpath, maxSecretFileSize)
 }
 
 // Delete removes a secret for the given username and path.
@@ -127,4 +126,31 @@ func (s *FileStore) secretRoot(username string) string {
 // filePath returns the full filesystem path for a user's secret.
 func (s *FileStore) filePath(username, secretPath string) string {
 	return filepath.Join(s.secretRoot(username), filepath.FromSlash(secretPath)+".enc")
+}
+
+// readFileNoFollow opens a file with O_NOFOLLOW to atomically prevent symlink
+// traversal, then reads its contents using a LimitedReader to enforce maxSize
+// without a separate stat call. This eliminates TOCTOU races between symlink
+// checks and file reads, and between size checks and file reads.
+func readFileNoFollow(path string, maxSize int64) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, fmt.Errorf("symlink detected at %q", filepath.Base(path))
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(io.LimitReader(f, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxSize {
+		return nil, fmt.Errorf("file %q exceeds size limit (%d bytes)", filepath.Base(path), maxSize)
+	}
+	return data, nil
 }
