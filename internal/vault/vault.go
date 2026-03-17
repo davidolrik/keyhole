@@ -3,6 +3,7 @@ package vault
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -308,7 +309,7 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 	wrappedWithToken := invite.WrappedKey
 
 	// Derive the token key and decrypt the vault key
-	tokenRaw, err := hexDecode(token)
+	tokenRaw, err := hex.DecodeString(token)
 	if err != nil {
 		return fmt.Errorf("invalid invite token: %w", err)
 	}
@@ -507,36 +508,6 @@ func deriveTokenKeyWithSalt(tokenBytes, salt []byte, vaultName, username string)
 		return nil, fmt.Errorf("hkdf derive token key: %w", err)
 	}
 	return key, nil
-}
-
-// hexDecode decodes a hex string to bytes.
-func hexDecode(s string) ([]byte, error) {
-	b := make([]byte, len(s)/2)
-	for i := 0; i < len(s); i += 2 {
-		if i+1 >= len(s) {
-			return nil, fmt.Errorf("odd hex string length")
-		}
-		hi := hexVal(s[i])
-		lo := hexVal(s[i+1])
-		if hi < 0 || lo < 0 {
-			return nil, fmt.Errorf("invalid hex character")
-		}
-		b[i/2] = byte(hi<<4 | lo)
-	}
-	return b, nil
-}
-
-func hexVal(c byte) int {
-	switch {
-	case c >= '0' && c <= '9':
-		return int(c - '0')
-	case c >= 'a' && c <= 'f':
-		return int(c - 'a' + 10)
-	case c >= 'A' && c <= 'F':
-		return int(c - 'A' + 10)
-	default:
-		return -1
-	}
 }
 
 // wrapVaultKey encrypts the vault key for a user using their agent-derived wrapping key.
