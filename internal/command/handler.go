@@ -693,6 +693,10 @@ func (h *Handler) handleInvite(sess ssh.Session, username string) error {
 		return fmt.Errorf("write invite: %w", err)
 	}
 
+	if h.auditLog != nil {
+		h.auditLog.VaultOp("invite_generated", username, sess.RemoteAddr().String(), "")
+	}
+
 	fmt.Fprintln(sess, code)
 	return nil
 }

@@ -1418,6 +1418,29 @@ func TestAuditLogVaultOperations(t *testing.T) {
 	}
 }
 
+func TestAuditLogInviteGenerated(t *testing.T) {
+	addr, dataDir, alice := testServerSetup(t)
+
+	// Admin generates invite code
+	_, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+
+	logPath := filepath.Join(dataDir, "audit.log")
+	lines := readLines(t, logPath)
+	var found bool
+	for _, l := range lines {
+		if strings.Contains(l, `"msg":"vault_invite_generated"`) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("no vault_invite_generated event in audit log; lines: %v", lines)
+	}
+}
+
 func TestVaultDestroyPersonalRejected(t *testing.T) {
 	addr, _, alice := testServerSetup(t)
 
