@@ -998,6 +998,10 @@ func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 					break
 				}
 				buf = append(buf, b[0])
+				if len(buf) > maxSecretSize {
+					ch <- result{nil, fmt.Errorf("secret too large (max %d bytes)", maxSecretSize)}
+					return
+				}
 			}
 			if err == io.EOF {
 				break
@@ -1006,10 +1010,6 @@ func readLine(sess ssh.Session, timeout time.Duration) ([]byte, error) {
 				ch <- result{nil, err}
 				return
 			}
-		}
-		if len(buf) > maxSecretSize {
-			ch <- result{nil, fmt.Errorf("secret too large (max %d bytes)", maxSecretSize)}
-			return
 		}
 		ch <- result{buf, nil}
 	}()
