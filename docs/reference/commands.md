@@ -4,15 +4,17 @@
 ssh [-A] <user>@<host> [-p <port>] <command> [args]
 ```
 
-`get` and `set` require SSH agent forwarding (`-A`).
+`get`, `set`, `del`, and `move` require SSH agent forwarding (`-A`).
 
 ## Personal secrets
 
-| Command           | Description                |
-| ----------------- | -------------------------- |
-| `get <path>`      | Decrypt and print a secret |
-| `set <path>`      | Encrypt and store a secret |
-| `list [prefix]`   | List secrets (alias: `ls`) |
+| Command            | Description                           |
+| ------------------ | ------------------------------------- |
+| `get <path>`       | Decrypt and print a secret            |
+| `set <path>`       | Encrypt and store a secret            |
+| `del <path>`       | Delete a secret (alias: `delete`)     |
+| `list [prefix]`    | List secrets (alias: `ls`)            |
+| `move <src> <dst>` | Move a secret between paths or vaults |
 
 ## Vault secrets
 
@@ -22,6 +24,7 @@ Use colon syntax to target a vault: `vault:path`.
 | ------------------------ | ---------------------- |
 | `get <vault>:<path>`     | Decrypt a vault secret |
 | `set <vault>:<path>`     | Encrypt a vault secret |
+| `del <vault>:<path>`     | Delete a vault secret  |
 | `list <vault>:[prefix]`  | List vault secrets     |
 
 ## Vault management

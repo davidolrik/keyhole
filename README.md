@@ -157,7 +157,9 @@ ssh [-A] <user>@<host> [-p <port>] <command> [args]
 | ----------------- | ------------------------------------------------ |
 | `get <path>`      | Decrypt and print a secret                       |
 | `set <path>`      | Encrypt and store a secret                       |
+| `del <path>`      | Delete a secret (alias: `delete`)                |
 | `list [prefix]`   | List secrets (alias: `ls`)                       |
+| `move <src> <dst>`| Move a secret between paths or vaults            |
 
 #### Vault secrets
 
@@ -167,6 +169,7 @@ Use colon syntax to target a vault: `vault:path`.
 | -------------------------- | --------------------------------- |
 | `get <vault>:<path>`       | Decrypt a vault secret            |
 | `set <vault>:<path>`       | Encrypt a vault secret            |
+| `del <vault>:<path>`       | Delete a vault secret             |
 | `list <vault>:[prefix]`    | List vault secrets                |
 
 #### Vault management
@@ -190,7 +193,7 @@ Use colon syntax to target a vault: `vault:path`.
 | `register <code>` | Register your SSH key                            |
 | `help`            | Show usage                                       |
 
-`get` and `set` require SSH agent forwarding (`-A`).
+`get`, `set`, `del`, and `move` require SSH agent forwarding (`-A`).
 
 ### Storing and retrieving secrets
 
@@ -207,6 +210,33 @@ ssh -A alice@keys.example.com get account/github
 # Use in a script
 export GITHUB_TOKEN=$(ssh -A alice@keys.example.com get tokens/github)
 ```
+
+### Deleting secrets
+
+```sh
+# Delete a personal secret (prompts for confirmation)
+ssh -A alice@keys.example.com del account/github
+
+# Delete a vault secret
+ssh -A alice@keys.example.com del team:deploy/old-key
+```
+
+`delete` is an alias for `del`.
+
+### Moving secrets
+
+```sh
+# Move a personal secret to a new path
+ssh -A alice@keys.example.com move account/github account/github-old
+
+# Move a personal secret into a vault (prompts for confirmation showing vault members)
+ssh -A alice@keys.example.com move tokens/deploy team:deploy/token
+
+# Move a vault secret to personal storage
+ssh -A alice@keys.example.com move team:deploy/token tokens/deploy
+```
+
+The source secret is deleted after a successful move. If the move target is a vault, you will be shown the vault members and asked to confirm before proceeding.
 
 ### Vault workflow
 

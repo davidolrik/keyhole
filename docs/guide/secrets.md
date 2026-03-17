@@ -8,7 +8,7 @@ Personal secrets are stored under your user account, encrypted with a key derive
 ssh [-A] <user>@<host> [-p <port>] <command> [args]
 ```
 
-`get` and `set` require SSH agent forwarding (`-A`).
+`get`, `set`, `del`, and `move` require SSH agent forwarding (`-A`).
 
 ## Storing secrets
 
@@ -47,3 +47,30 @@ ssh alice@keys.example.com ls account/*
 ```
 
 `list` and `ls` are aliases. See [Colors](/guide/colors) for output formatting details.
+
+## Deleting secrets
+
+```sh
+# Delete a personal secret (prompts for confirmation)
+ssh -A alice@keys.example.com del account/github
+
+# Using the alias
+ssh -A alice@keys.example.com delete account/github
+```
+
+You will be asked to confirm before the secret is deleted. The secret must exist and be decryptable — if decryption fails, the delete is aborted.
+
+## Moving secrets
+
+```sh
+# Rename a secret
+ssh -A alice@keys.example.com move account/github account/github-old
+
+# Move a personal secret into a vault
+ssh -A alice@keys.example.com move tokens/deploy team:deploy/token
+
+# Move a vault secret to personal storage
+ssh -A alice@keys.example.com move team:deploy/token tokens/deploy
+```
+
+The source secret is decrypted and re-encrypted at the destination, then the source is deleted. If the destination is a vault, you will be shown the vault members and asked to confirm before proceeding.

@@ -82,6 +82,9 @@ ssh -A alice@keys.example.com set team:deploy/api-key
 # Retrieve it
 ssh -A bob@keys.example.com get team:deploy/api-key
 
+# Delete a vault secret (prompts for confirmation)
+ssh -A alice@keys.example.com del team:deploy/old-key
+
 # List vault secrets
 ssh alice@keys.example.com list team:
 ```
