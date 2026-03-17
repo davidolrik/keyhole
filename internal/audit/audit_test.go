@@ -207,6 +207,55 @@ func TestLogLinesAreValidJSON(t *testing.T) {
 	}
 }
 
+func TestLogRotationOnStartup(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "audit.log")
+
+	// Create a log file larger than the rotation threshold (10MB)
+	f, err := os.Create(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Write 11MB of data
+	chunk := make([]byte, 1024*1024) // 1MB
+	for i := range chunk {
+		chunk[i] = 'x'
+	}
+	for i := 0; i < 11; i++ {
+		if _, err := f.Write(chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.Close()
+
+	// Opening a new logger should rotate the large file
+	lg, err := audit.NewLogger(dir)
+	if err != nil {
+		t.Fatalf("NewLogger: %v", err)
+	}
+	lg.Connect("alice", "1.2.3.4:1", "SHA256:aaa")
+	lg.Close()
+
+	// The old log should have been rotated
+	rotatedPath := logPath + ".1"
+	info, err := os.Stat(rotatedPath)
+	if err != nil {
+		t.Fatalf("rotated log not found: %v", err)
+	}
+	if info.Size() < 10*1024*1024 {
+		t.Errorf("rotated log size = %d, expected >= 10MB", info.Size())
+	}
+
+	// The new log should be small (just the one entry we wrote)
+	info, err = os.Stat(logPath)
+	if err != nil {
+		t.Fatalf("new log not found: %v", err)
+	}
+	if info.Size() > 1024*1024 {
+		t.Errorf("new log size = %d, expected < 1MB", info.Size())
+	}
+}
+
 // lastEntry returns the last log entry parsed from the audit log.
 func lastEntry(t *testing.T, path string) logEntry {
 	t.Helper()

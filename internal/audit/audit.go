@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+const maxLogSize = 10 * 1024 * 1024 // 10MB
+
 // Logger writes structured audit events to {dataDir}/audit.log as JSON.
 // All methods are goroutine-safe.
 type Logger struct {
@@ -15,8 +17,15 @@ type Logger struct {
 }
 
 // NewLogger opens (or creates) the audit log file in dataDir and returns a Logger.
+// If the existing log exceeds 10MB, it is rotated to audit.log.1 before opening.
 func NewLogger(dataDir string) (*Logger, error) {
 	path := filepath.Join(dataDir, "audit.log")
+
+	// Rotate if the log has grown too large.
+	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
+		os.Rename(path, path+".1")
+	}
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log: %w", err)
