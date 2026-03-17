@@ -64,15 +64,17 @@ func (e *Encryptor) DecryptAndUpgrade(ag agent.ExtendedAgent, pubKey ssh.PublicK
 		return plaintext, nil
 	}
 
-	// Fall back to nil-salt (legacy) derivation
+	// Fall back to nil-salt (legacy) derivation. Always attempt both paths
+	// and return a generic error to avoid leaking whether the ciphertext
+	// was encrypted with salted or legacy key derivation.
 	legacyKey, keyErr := e.deriveKeyWithSalt(ag, pubKey, serverSecret, username, path, nil)
 	if keyErr != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt: %w", err)
 	}
 	plaintext, legacyErr := DecryptWithKey(legacyKey, ciphertext)
 	Zeroize(legacyKey)
 	if legacyErr != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt: %w", err)
 	}
 
 	// Re-encrypt with salted key and write back
