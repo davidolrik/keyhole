@@ -1647,7 +1647,7 @@ func TestShortServerSecretRejected(t *testing.T) {
 	dataDir := testDataDir(t)
 
 	// 63 characters — one short of the 64-character minimum
-	secret63 := strings.Repeat("a", 63)
+	secret63 := []byte(strings.Repeat("a", 63))
 	cfg := server.Config{
 		DataDir:      dataDir,
 		ServerSecret: secret63,
@@ -1665,7 +1665,7 @@ func TestValidServerSecretAccepted(t *testing.T) {
 	dataDir := testDataDir(t)
 
 	// Exactly 64 characters — meets the minimum
-	secret64 := strings.Repeat("a", 64)
+	secret64 := []byte(strings.Repeat("a", 64))
 	cfg := server.Config{
 		DataDir:      dataDir,
 		ServerSecret: secret64,

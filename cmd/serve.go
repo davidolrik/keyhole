@@ -77,7 +77,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		Listen:       cfg.Listen,
 		DataDir:      cfg.DataDir,
 		Admins:       cfg.Admins,
-		ServerSecret: cfg.ServerSecret,
+		ServerSecret: []byte(cfg.ServerSecret),
 		Version:      Version,
 	})
 	if err != nil {

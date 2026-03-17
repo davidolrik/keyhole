@@ -45,7 +45,7 @@ type Config struct {
 	Listen          string
 	DataDir         string
 	Admins          []string
-	ServerSecret    string // alphanumeric; if empty, loaded from {DataDir}/server_secret
+	ServerSecret    []byte // alphanumeric; if empty, loaded from {DataDir}/server_secret
 	Version         string
 	ConnRateLimit   int           // max auth attempts per minute per IP; 0 = default (10)
 	ReadLineTimeout time.Duration // timeout for reading a line of input; 0 = default (60s)
@@ -372,9 +372,10 @@ const minServerSecretLength = 64
 
 // resolveServerSecret returns the server secret from the config value if provided,
 // otherwise falls back to loading or generating from a file.
-func resolveServerSecret(configValue, path string) ([]byte, error) {
-	if configValue != "" {
-		secret := []byte(strings.TrimSpace(configValue))
+func resolveServerSecret(configValue []byte, path string) ([]byte, error) {
+	if len(configValue) != 0 {
+		secret := make([]byte, len(configValue))
+		copy(secret, configValue)
 		if len(secret) < minServerSecretLength {
 			return nil, fmt.Errorf("server secret must be at least %d characters", minServerSecretLength)
 		}
