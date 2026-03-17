@@ -99,7 +99,7 @@ func (lg *Logger) VaultOp(op, actor, remote, vaultName string, attrs ...any) {
 		"remote", remote,
 		"vault", vaultName,
 	}
-	args = append(args, attrs...)
+	args = append(args, sanitizeAttrs(attrs)...)
 	lg.l.Info("vault_"+sanitizeLogValue(op), args...)
 }
 
@@ -111,7 +111,7 @@ func (lg *Logger) VaultOpDenied(op, actor, remote, vaultName, reason string, att
 		"vault", vaultName,
 		"reason", sanitizeLogValue(reason),
 	}
-	args = append(args, attrs...)
+	args = append(args, sanitizeAttrs(attrs)...)
 	lg.l.Warn("vault_"+sanitizeLogValue(op)+"_denied", args...)
 }
 
@@ -124,15 +124,27 @@ func (lg *Logger) Command(username, remote, op, path string, err error, attrs ..
 		"op", op,
 		"path", path,
 	}
+	sanitized := sanitizeAttrs(attrs)
 	if err == nil {
 		args = append(args, "result", "ok")
-		args = append(args, attrs...)
+		args = append(args, sanitized...)
 		lg.l.Info("command", args...)
 	} else {
 		args = append(args, "result", "error", "err", sanitizeLogValue(err.Error()))
-		args = append(args, attrs...)
+		args = append(args, sanitized...)
 		lg.l.Error("command", args...)
 	}
+}
+
+// sanitizeAttrs sanitizes all string values in a key-value attrs slice,
+// preventing log injection through user-controlled variadic parameters.
+func sanitizeAttrs(attrs []any) []any {
+	for i, a := range attrs {
+		if s, ok := a.(string); ok {
+			attrs[i] = sanitizeLogValue(s)
+		}
+	}
+	return attrs
 }
 
 // sanitizeLogValue strips control characters (newlines, tabs, etc.) from a

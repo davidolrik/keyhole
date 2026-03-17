@@ -318,6 +318,54 @@ func TestLogCommandWithAttrs(t *testing.T) {
 	}
 }
 
+func TestLogSanitizesAttrsInVaultOp(t *testing.T) {
+	dir := t.TempDir()
+	lg, _ := audit.NewLogger(dir)
+	lg.VaultOp("invite", "alice", "1.2.3.4:5678", "myvault",
+		"target", "evil\nuser attacker level CRITICAL vault_destroy vault_important")
+
+	entry := lastEntryRaw(t, filepath.Join(dir, "audit.log"))
+	target, ok := entry["target"].(string)
+	if !ok {
+		t.Fatal("target field missing or not a string")
+	}
+	if target != "evil user attacker level CRITICAL vault_destroy vault_important" {
+		t.Errorf("target not sanitized: %q", target)
+	}
+}
+
+func TestLogSanitizesAttrsInVaultOpDenied(t *testing.T) {
+	dir := t.TempDir()
+	lg, _ := audit.NewLogger(dir)
+	lg.VaultOpDenied("promote", "mallory", "1.2.3.4:5678", "teamvault", "denied",
+		"target", "evil\ruser\tattack")
+
+	entry := lastEntryRaw(t, filepath.Join(dir, "audit.log"))
+	target, ok := entry["target"].(string)
+	if !ok {
+		t.Fatal("target field missing or not a string")
+	}
+	if target != "evil user attack" {
+		t.Errorf("target not sanitized: %q", target)
+	}
+}
+
+func TestLogSanitizesAttrsInCommand(t *testing.T) {
+	dir := t.TempDir()
+	lg, _ := audit.NewLogger(dir)
+	lg.Command("alice", "10.0.0.1:9999", "move", "db/password", nil,
+		"target_vault", "evil\nvault\x01injection")
+
+	entry := lastEntryRaw(t, filepath.Join(dir, "audit.log"))
+	tv, ok := entry["target_vault"].(string)
+	if !ok {
+		t.Fatal("target_vault field missing or not a string")
+	}
+	if tv != "evil vaultinjection" {
+		t.Errorf("target_vault not sanitized: %q", tv)
+	}
+}
+
 // lastEntryRaw returns the last log entry as a raw map for testing dynamic keys.
 func lastEntryRaw(t *testing.T, path string) map[string]any {
 	t.Helper()
