@@ -12,6 +12,11 @@ import (
 // ErrNotFound is returned when a secret does not exist.
 var ErrNotFound = errors.New("secret not found")
 
+// maxSecretFileSize limits the size of secret files read from disk to prevent
+// memory exhaustion from files placed directly in the data directory.
+// This is larger than the 64KB input limit to account for encryption overhead.
+const maxSecretFileSize = 128 * 1024 // 128KB
+
 // Store is the interface for reading and writing secrets.
 type Store interface {
 	Write(username, path string, ciphertext []byte) error
@@ -50,14 +55,7 @@ func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 	if isSymlink(fpath) {
 		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
 	}
-	data, err := os.ReadFile(fpath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return data, nil
+	return readFileLimited(fpath, maxSecretFileSize)
 }
 
 // Delete removes a secret for the given username and path.

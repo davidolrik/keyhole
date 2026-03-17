@@ -36,14 +36,7 @@ func (s *FileStore) ReadVaultSecret(vault, secretPath string) ([]byte, error) {
 	if isSymlink(fpath) {
 		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
 	}
-	data, err := os.ReadFile(fpath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return data, nil
+	return readFileLimited(fpath, maxSecretFileSize)
 }
 
 // ListVaultSecrets returns all secret paths in a vault that match the given prefix.

@@ -234,6 +234,34 @@ func TestFileStore_DeleteRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestFileStore_ReadRejectsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Write a small secret through the normal path
+	if err := store.Write("alice", "small", []byte("ok")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Manually write an oversized file directly to disk
+	largePath := filepath.Join(dir, "alice", "account", "huge.enc")
+	large := make([]byte, 256*1024) // 256KB > 128KB limit
+	if err := os.WriteFile(largePath, large, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Normal read should work
+	if _, err := store.Read("alice", "small"); err != nil {
+		t.Fatalf("Read small: %v", err)
+	}
+
+	// Oversized read should fail
+	_, err := store.Read("alice", "huge")
+	if err == nil {
+		t.Fatal("Read oversized file should fail")
+	}
+}
+
 func TestFileStore_ListEmpty(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)

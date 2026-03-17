@@ -171,6 +171,37 @@ func TestVaultStore_PendingInviteRoundtrip(t *testing.T) {
 	}
 }
 
+func TestVaultStore_ReadSecretRejectsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Write a normal secret
+	if err := store.WriteVaultSecret("tv", "small", []byte("ok")); err != nil {
+		t.Fatalf("WriteVaultSecret: %v", err)
+	}
+
+	// Manually write an oversized file
+	largePath := filepath.Join(dir, "vaults", "tv", "secrets", "huge.enc")
+	if err := os.MkdirAll(filepath.Dir(largePath), 0700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	large := make([]byte, 256*1024)
+	if err := os.WriteFile(largePath, large, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Normal read should work
+	if _, err := store.ReadVaultSecret("tv", "small"); err != nil {
+		t.Fatalf("ReadVaultSecret small: %v", err)
+	}
+
+	// Oversized read should fail
+	_, err := store.ReadVaultSecret("tv", "huge")
+	if err == nil {
+		t.Fatal("ReadVaultSecret oversized should fail")
+	}
+}
+
 func TestVaultStore_WriteMetaRejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	store := storage.NewFileStore(dir)
