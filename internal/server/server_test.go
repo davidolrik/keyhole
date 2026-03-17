@@ -76,10 +76,10 @@ func newTestUser(t *testing.T, username string) *testUser {
 	return &testUser{edPriv: signer, sshPub: sshPub, ag: extAgent, cfg: cfg}
 }
 
-// testServerSetup creates a server with alice as admin, registers alice, and returns the address.
-func testServerSetup(t *testing.T) (addr string, alice *testUser) {
+// testServerSetup creates a server with alice as admin, registers alice, and returns the address and data directory.
+func testServerSetup(t *testing.T) (addr, dataDir string, alice *testUser) {
 	t.Helper()
-	dataDir := t.TempDir()
+	dataDir = t.TempDir()
 	alice = newTestUser(t, "alice")
 
 	cfg := server.Config{
@@ -102,7 +102,7 @@ func testServerSetup(t *testing.T) (addr string, alice *testUser) {
 	t.Cleanup(func() { ln.Close() })
 	time.Sleep(10 * time.Millisecond)
 
-	return ln.Addr().String(), alice
+	return ln.Addr().String(), dataDir, alice
 }
 
 // sshRunWithStdin runs a command over SSH with stdin and agent forwarding.
@@ -189,7 +189,7 @@ func sshRun(t *testing.T, addr string, cfg *gossh.ClientConfig, ag agent.Extende
 }
 
 func TestSetAndGet(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "hunter2"); err != nil {
 		t.Fatalf("set: %v", err)
@@ -205,7 +205,7 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	for _, path := range []string{"account/github", "account/twitter", "db/prod"} {
 		if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set "+path, "value"); err != nil {
@@ -233,7 +233,7 @@ func TestList(t *testing.T) {
 }
 
 func TestGetNonExistent(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	_, err := sshRun(t, addr, alice.cfg, alice.ag, "get nonexistent/secret")
 	if err == nil {
@@ -242,7 +242,7 @@ func TestGetNonExistent(t *testing.T) {
 }
 
 func TestGetWithoutAgentFails(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// No agent passed
 	_, err := sshRun(t, addr, alice.cfg, nil, "get account/something")
@@ -252,7 +252,7 @@ func TestGetWithoutAgentFails(t *testing.T) {
 }
 
 func TestSetWithoutAgentFails(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	_, err := sshRunWithStdin(t, addr, alice.cfg, nil, "set account/something", "secret")
 	if err == nil {
@@ -261,7 +261,7 @@ func TestSetWithoutAgentFails(t *testing.T) {
 }
 
 func TestUnknownCommandFails(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	_, err := sshRun(t, addr, alice.cfg, alice.ag, "delete account/github")
 	if err == nil {
@@ -270,7 +270,7 @@ func TestUnknownCommandFails(t *testing.T) {
 }
 
 func TestInviteAndRegister(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// Admin generates invite
 	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
@@ -308,7 +308,7 @@ func TestInviteAndRegister(t *testing.T) {
 }
 
 func TestInviteRegistrationRejected(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
 	if err != nil {
@@ -392,7 +392,7 @@ func TestEd25519OnlyAuth(t *testing.T) {
 }
 
 func TestPathTraversalRejected(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	_, err := sshRun(t, addr, alice.cfg, alice.ag, "get ../../../etc/passwd")
 	if err == nil {
@@ -401,7 +401,7 @@ func TestPathTraversalRejected(t *testing.T) {
 }
 
 func TestSetOverwritesExistingSecret(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/key", "original"); err != nil {
 		t.Fatalf("set original: %v", err)
@@ -463,7 +463,7 @@ func TestSecretIsolationBetweenUsers(t *testing.T) {
 }
 
 func TestListGlob(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	for _, path := range []string{"account/github", "account/gitlab", "account/twitter", "db/prod"} {
 		if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set "+path, "v"); err != nil {
@@ -501,7 +501,7 @@ func TestListGlob(t *testing.T) {
 }
 
 func TestLsAlias(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	for _, path := range []string{"account/github", "account/twitter"} {
 		if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set "+path, "v"); err != nil {
@@ -524,7 +524,7 @@ func TestLsAlias(t *testing.T) {
 
 
 func TestHelp(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	out, err := sshRun(t, addr, alice.cfg, alice.ag, "help")
 	if err != nil {
@@ -538,7 +538,7 @@ func TestHelp(t *testing.T) {
 }
 
 func TestHelpColors(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// Default (colors on): output should contain ANSI codes
 	colored, err := sshRun(t, addr, alice.cfg, alice.ag, "help")
@@ -560,7 +560,7 @@ func TestHelpColors(t *testing.T) {
 }
 
 func TestListColorDefault(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "s"); err != nil {
 		t.Fatalf("set: %v", err)
@@ -595,7 +595,7 @@ func TestListColorDefault(t *testing.T) {
 }
 
 func TestAuditLogWritten(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, dataDir, alice := testServerSetup(t)
 
 	// Run a set then a get to produce connect + command entries
 	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set audit/test", "s3cr3t"); err != nil {
@@ -605,11 +605,7 @@ func TestAuditLogWritten(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 
-	// Locate the dataDir used by testServerSetup — it is alice's temp dir.
-	// We reconstruct it by checking where alice's authorized_keys live.
-	// testServerSetup uses t.TempDir() which is dataDir; authorized_keys is at dataDir/alice/.ssh/authorized_keys.
-	// We find the audit.log by scanning parent dirs of the test temp dir.
-	logPath := findAuditLog(t)
+	logPath := filepath.Join(dataDir, "audit.log")
 
 	lines := readLines(t, logPath)
 	if len(lines) == 0 {
@@ -695,52 +691,6 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
-// findDataDir finds the data directory used by testServerSetup.
-func findDataDir(t *testing.T) string {
-	t.Helper()
-	base := t.TempDir()
-	parent := filepath.Dir(filepath.Dir(base))
-	var found string
-	_ = filepath.Walk(parent, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.Name() == "server_secret" {
-			found = filepath.Dir(path)
-		}
-		return nil
-	})
-	if found == "" {
-		t.Fatal("could not find data dir")
-	}
-	return found
-}
-
-// findAuditLog finds the audit.log written by testServerSetup in TestAuditLogWritten.
-// testServerSetup uses t.TempDir(), so we search the test's temp dir hierarchy.
-func findAuditLog(t *testing.T) string {
-	t.Helper()
-	// t.TempDir() returns something like /tmp/TestAuditLogWritten1234/001
-	// The audit.log is in the dataDir, which is the first TempDir created in testServerSetup.
-	// We can find it by listing all audit.log files under the test's parent temp dir.
-	base := t.TempDir() // a new subdir; parent is the test root temp
-	parent := filepath.Dir(filepath.Dir(base))
-	var found string
-	_ = filepath.Walk(parent, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.Name() == "audit.log" {
-			found = path
-		}
-		return nil
-	})
-	if found == "" {
-		t.Fatal("could not find audit.log under test temp dir")
-	}
-	return found
-}
-
 // readLines returns all non-empty lines of a file.
 func readLines(t *testing.T, path string) []string {
 	t.Helper()
@@ -760,9 +710,9 @@ func readLines(t *testing.T, path string) []string {
 }
 
 // testServerSetupMultiUser creates a server with alice (admin) and bob registered.
-func testServerSetupMultiUser(t *testing.T) (addr string, alice, bob *testUser) {
+func testServerSetupMultiUser(t *testing.T) (addr, dataDir string, alice, bob *testUser) {
 	t.Helper()
-	dataDir := t.TempDir()
+	dataDir = t.TempDir()
 	alice = newTestUser(t, "alice")
 	bob = newTestUser(t, "bob")
 
@@ -789,11 +739,11 @@ func testServerSetupMultiUser(t *testing.T) (addr string, alice, bob *testUser) 
 	t.Cleanup(func() { ln.Close() })
 	time.Sleep(10 * time.Millisecond)
 
-	return ln.Addr().String(), alice, bob
+	return ln.Addr().String(), dataDir, alice, bob
 }
 
 func TestVaultCreateInviteAcceptSetGet(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	// Alice creates a vault
 	out, err := sshRun(t, addr, alice.cfg, alice.ag, "vault create teamvault")
@@ -845,7 +795,7 @@ func TestVaultCreateInviteAcceptSetGet(t *testing.T) {
 }
 
 func TestVaultListSecrets(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -877,7 +827,7 @@ func TestVaultListSecrets(t *testing.T) {
 }
 
 func TestVaultNonMemberCannotAccess(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create secret-vault")
 	sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set secret-vault:key", "value")
@@ -890,7 +840,7 @@ func TestVaultNonMemberCannotAccess(t *testing.T) {
 }
 
 func TestVaultMemberCannotInvite(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -913,7 +863,7 @@ func TestVaultMemberCannotInvite(t *testing.T) {
 }
 
 func TestVaultPromoteAndInvite(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -942,7 +892,7 @@ func TestVaultPromoteAndInvite(t *testing.T) {
 }
 
 func TestVaultDemote(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -986,7 +936,7 @@ func TestVaultDemote(t *testing.T) {
 }
 
 func TestVaultDemoteNonAdminFails(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
@@ -1001,7 +951,7 @@ func TestVaultDemoteNonAdminFails(t *testing.T) {
 }
 
 func TestVaultDemotedAdminCannotInvite(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -1028,7 +978,7 @@ func TestVaultDemotedAdminCannotInvite(t *testing.T) {
 }
 
 func TestVaultRevoke(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -1066,7 +1016,7 @@ func TestVaultRevoke(t *testing.T) {
 }
 
 func TestVaultRevokeNonAdminFails(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 
@@ -1089,7 +1039,7 @@ func TestVaultRevokeNonAdminFails(t *testing.T) {
 }
 
 func TestVaultRevokeOwnerFails(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
@@ -1104,7 +1054,7 @@ func TestVaultRevokeOwnerFails(t *testing.T) {
 }
 
 func TestVaultMembers(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 	tokenOut, _ := sshRun(t, addr, alice.cfg, alice.ag, "vault invite tv bob")
@@ -1123,7 +1073,7 @@ func TestVaultMembers(t *testing.T) {
 }
 
 func TestVaultList(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create alpha")
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create beta")
@@ -1138,7 +1088,7 @@ func TestVaultList(t *testing.T) {
 }
 
 func TestPersonalVaultUnchanged(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	// Personal vault operations should work exactly as before
 	if _, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set account/github", "token123"); err != nil {
@@ -1163,7 +1113,7 @@ func TestPersonalVaultUnchanged(t *testing.T) {
 }
 
 func TestMovePersonalToVault(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create tv")
 	sshRunWithStdin(t, addr, alice.cfg, alice.ag, "set mykey", "secret-value")
@@ -1194,7 +1144,7 @@ func TestMovePersonalToVault(t *testing.T) {
 }
 
 func TestAgentTempDirCleanup(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// Snapshot existing auth-agent dirs before our operations
 	before, err := filepath.Glob(filepath.Join(os.TempDir(), "auth-agent*"))
@@ -1267,7 +1217,7 @@ func TestHelpIncludesVersion(t *testing.T) {
 }
 
 func TestVaultDestroyByOwner(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	// Create vault and set a secret
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create doomed")
@@ -1299,7 +1249,7 @@ func TestVaultDestroyByOwner(t *testing.T) {
 }
 
 func TestVaultDestroyNonOwnerFails(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, _, alice, bob := testServerSetupMultiUser(t)
 
 	// Alice creates vault and invites Bob
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create protected")
@@ -1324,7 +1274,7 @@ func TestVaultDestroyNonOwnerFails(t *testing.T) {
 }
 
 func TestVaultDestroyCancelledOnMismatch(t *testing.T) {
-	addr, alice, _ := testServerSetupMultiUser(t)
+	addr, _, alice, _ := testServerSetupMultiUser(t)
 
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create keepsafe")
 
@@ -1348,7 +1298,7 @@ func TestVaultDestroyCancelledOnMismatch(t *testing.T) {
 }
 
 func TestExpiredInviteCodeRejected(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, dataDir, alice := testServerSetup(t)
 
 	// Admin generates invite
 	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
@@ -1356,9 +1306,6 @@ func TestExpiredInviteCodeRejected(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	inviteCode := strings.TrimSpace(inviteOut)
-
-	// Find the invite file and tamper with its timestamp
-	dataDir := findDataDir(t)
 	invitePath := filepath.Join(dataDir, "invites", inviteCode)
 	expired := time.Now().Add(-96 * time.Hour).UTC().Format(time.RFC3339)
 	if err := os.WriteFile(invitePath, []byte(expired), 0600); err != nil {
@@ -1374,7 +1321,7 @@ func TestExpiredInviteCodeRejected(t *testing.T) {
 }
 
 func TestSanitizedErrorMessages(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// Try to get a nonexistent secret — error should not leak internal details
 	out, err := sshRun(t, addr, alice.cfg, alice.ag, "get nonexistent/secret")
@@ -1388,7 +1335,7 @@ func TestSanitizedErrorMessages(t *testing.T) {
 }
 
 func TestAuditLogRegistration(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, dataDir, alice := testServerSetup(t)
 
 	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
 	if err != nil {
@@ -1402,7 +1349,7 @@ func TestAuditLogRegistration(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	logPath := findAuditLog(t)
+	logPath := filepath.Join(dataDir, "audit.log")
 	lines := readLines(t, logPath)
 
 	var hasRegistration bool
@@ -1417,7 +1364,7 @@ func TestAuditLogRegistration(t *testing.T) {
 }
 
 func TestAuditLogVaultOperations(t *testing.T) {
-	addr, alice, bob := testServerSetupMultiUser(t)
+	addr, dataDir, alice, bob := testServerSetupMultiUser(t)
 
 	// Create vault
 	sshRun(t, addr, alice.cfg, alice.ag, "vault create auditv")
@@ -1435,8 +1382,6 @@ func TestAuditLogVaultOperations(t *testing.T) {
 	// Destroy vault
 	sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy auditv", "auditv\n")
 
-	// Find audit log
-	dataDir := findDataDir(t)
 	logPath := filepath.Join(dataDir, "audit.log")
 	lines := readLines(t, logPath)
 
@@ -1462,7 +1407,7 @@ func TestAuditLogVaultOperations(t *testing.T) {
 }
 
 func TestVaultDestroyPersonalRejected(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	_, err := sshRunWithStdin(t, addr, alice.cfg, alice.ag, "vault destroy personal", "personal\n")
 	if err == nil {
@@ -1471,7 +1416,7 @@ func TestVaultDestroyPersonalRejected(t *testing.T) {
 }
 
 func TestWrongKeyCanStillConnect(t *testing.T) {
-	addr, _ := testServerSetup(t)
+	addr, _, _ := testServerSetup(t)
 
 	// Someone with a different Ed25519 key connecting as "alice" (who is registered).
 	// Should get through SSH auth but be restricted to register only.
@@ -1495,7 +1440,7 @@ func TestWrongKeyCanStillConnect(t *testing.T) {
 }
 
 func TestWrongKeyCannotRunCommands(t *testing.T) {
-	addr, _ := testServerSetup(t)
+	addr, _, _ := testServerSetup(t)
 
 	imposter := newTestUser(t, "alice")
 
@@ -1511,7 +1456,7 @@ func TestWrongKeyCannotRunCommands(t *testing.T) {
 }
 
 func TestUnregisteredAndWrongKeyGetSameError(t *testing.T) {
-	addr, _ := testServerSetup(t)
+	addr, _, _ := testServerSetup(t)
 
 	imposter := newTestUser(t, "alice")
 	stranger := newTestUser(t, "nobody")
@@ -1525,7 +1470,7 @@ func TestUnregisteredAndWrongKeyGetSameError(t *testing.T) {
 }
 
 func TestRegisterWithBadCodeDoesNotLeakUsername(t *testing.T) {
-	addr, _ := testServerSetup(t)
+	addr, _, _ := testServerSetup(t)
 
 	// Try registering as "alice" (who exists) with a bad invite code
 	imposter := newTestUser(t, "alice")
@@ -1540,7 +1485,7 @@ func TestRegisterWithBadCodeDoesNotLeakUsername(t *testing.T) {
 }
 
 func TestExpiredAndNonExistentInviteReturnSameError(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, dataDir, alice := testServerSetup(t)
 
 	// Generate a real invite and expire it
 	inviteOut, err := sshRun(t, addr, alice.cfg, alice.ag, "invite")
@@ -1548,8 +1493,6 @@ func TestExpiredAndNonExistentInviteReturnSameError(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	inviteCode := strings.TrimSpace(inviteOut)
-
-	dataDir := findDataDir(t)
 	invitePath := filepath.Join(dataDir, "invites", inviteCode)
 	expired := time.Now().Add(-96 * time.Hour).UTC().Format(time.RFC3339)
 	if err := os.WriteFile(invitePath, []byte(expired), 0600); err != nil {
@@ -1675,7 +1618,7 @@ func TestReadLineTimeout(t *testing.T) {
 }
 
 func TestHelpIncludesVaultCommands(t *testing.T) {
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	out, err := sshRun(t, addr, alice.cfg, alice.ag, "help")
 	if err != nil {
@@ -1775,7 +1718,7 @@ func TestSanitizeErrorStripsInternalDetails(t *testing.T) {
 	// by sessionHandler's sanitizeError. We verify this by attempting an operation
 	// that returns a wrapped error and checking the SSH output.
 
-	addr, alice := testServerSetup(t)
+	addr, _, alice := testServerSetup(t)
 
 	// Try to get a non-existent secret — the error will be wrapped
 	out, err := sshRun(t, addr, alice.cfg, alice.ag, "get nonexistent/secret")
