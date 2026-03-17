@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,12 +37,18 @@ func (s *FileStore) Write(username, secretPath string, ciphertext []byte) error 
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, ciphertext, 0600)
 }
 
 // Read returns the raw ciphertext for the given username and path.
 func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 	fpath := s.filePath(username, secretPath)
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -50,6 +57,15 @@ func (s *FileStore) Read(username, secretPath string) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+// isSymlink reports whether path is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
 }
 
 // List returns all secret paths for username that start with prefix.

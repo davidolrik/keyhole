@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,12 +22,18 @@ func (s *FileStore) WriteVaultSecret(vault, secretPath string, ciphertext []byte
 	if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
 		return err
 	}
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	return os.WriteFile(fpath, ciphertext, 0600)
 }
 
 // ReadVaultSecret reads an encrypted secret from a vault.
 func (s *FileStore) ReadVaultSecret(vault, secretPath string) ([]byte, error) {
 	fpath := s.vaultSecretPath(vault, secretPath)
+	if isSymlink(fpath) {
+		return nil, fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	data, err := os.ReadFile(fpath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -76,6 +83,9 @@ func (s *FileStore) ListVaultSecrets(vault, prefix string) ([]string, error) {
 // DeleteVaultSecret removes a secret from a vault.
 func (s *FileStore) DeleteVaultSecret(vault, secretPath string) error {
 	fpath := s.vaultSecretPath(vault, secretPath)
+	if isSymlink(fpath) {
+		return fmt.Errorf("symlink detected at %q", filepath.Base(fpath))
+	}
 	err := os.Remove(fpath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return ErrNotFound

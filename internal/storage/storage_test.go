@@ -2,6 +2,8 @@ package storage_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.olrik.dev/keyhole/internal/storage"
@@ -131,6 +133,50 @@ func TestFileStore_IsolatesByUser(t *testing.T) {
 	}
 	if string(bobData) != "bob-data" {
 		t.Errorf("bob data = %q, want bob-data", bobData)
+	}
+}
+
+func TestFileStore_ReadRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Write a real secret first
+	if err := store.Write("alice", "real", []byte("secret-data")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Create a symlink from alice/account/linked.enc -> real.enc
+	realPath := filepath.Join(dir, "alice", "account", "real.enc")
+	linkPath := filepath.Join(dir, "alice", "account", "linked.enc")
+	if err := os.Symlink(realPath, linkPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	_, err := store.Read("alice", "linked")
+	if err == nil {
+		t.Fatal("Read through symlink should fail")
+	}
+}
+
+func TestFileStore_WriteRejectsSymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	store := storage.NewFileStore(dir)
+
+	// Create target directory and a symlink to somewhere else
+	targetDir := t.TempDir()
+	accountDir := filepath.Join(dir, "alice", "account")
+	if err := os.MkdirAll(accountDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(accountDir, "evil.enc")
+	targetFile := filepath.Join(targetDir, "pwned.enc")
+	if err := os.Symlink(targetFile, linkPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	err := store.Write("alice", "evil", []byte("data"))
+	if err == nil {
+		t.Fatal("Write through symlink should fail")
 	}
 }
 
