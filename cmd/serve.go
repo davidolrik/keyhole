@@ -88,6 +88,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
 	log.Printf("keyhole listening on %s", cfg.Listen)
 
 	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
