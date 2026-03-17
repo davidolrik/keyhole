@@ -68,6 +68,9 @@ func New(cfg Config) (*Server, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
+	if err := checkDataDirPermissions(cfg.DataDir); err != nil {
+		return nil, err
+	}
 
 	hostKey, err := loadOrGenerateHostKey(filepath.Join(cfg.DataDir, "host_key"))
 	if err != nil {
@@ -282,6 +285,19 @@ func sanitizeError(err error) string {
 		return strings.TrimSuffix(full, suffix)
 	}
 	return err.Error()
+}
+
+// checkDataDirPermissions warns if the data directory is accessible by group or others.
+func checkDataDirPermissions(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("stat data dir: %w", err)
+	}
+	perm := info.Mode().Perm()
+	if perm&0077 != 0 {
+		return fmt.Errorf("data directory %s has permissions %04o; must not be accessible by group or others (expected 0700)", dir, perm)
+	}
+	return nil
 }
 
 // loadOrGenerateHostKey loads an Ed25519 host key from path, generating one if absent.

@@ -22,6 +22,18 @@ import (
 	"go.olrik.dev/keyhole/internal/server"
 )
 
+// testDataDir creates a temporary directory with 0700 permissions for use as a data dir.
+// t.TempDir() may use OS-default permissions (e.g. 0755 on macOS), which would
+// fail the server's data directory permission check.
+func testDataDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatalf("chmod data dir: %v", err)
+	}
+	return dir
+}
+
 // syncBuffer is a goroutine-safe bytes.Buffer for capturing concurrent SSH I/O.
 type syncBuffer struct {
 	mu  sync.Mutex
@@ -79,7 +91,7 @@ func newTestUser(t *testing.T, username string) *testUser {
 // testServerSetup creates a server with alice as admin, registers alice, and returns the address and data directory.
 func testServerSetup(t *testing.T) (addr, dataDir string, alice *testUser) {
 	t.Helper()
-	dataDir = t.TempDir()
+	dataDir = testDataDir(t)
 	alice = newTestUser(t, "alice")
 
 	cfg := server.Config{
@@ -334,7 +346,7 @@ func TestInviteRegistrationRejected(t *testing.T) {
 }
 
 func TestNonAdminInviteFails(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 
 	// Server with NO admins
@@ -358,7 +370,7 @@ func TestNonAdminInviteFails(t *testing.T) {
 }
 
 func TestEd25519OnlyAuth(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	cfg := server.Config{DataDir: dataDir, Admins: nil}
 	srv, err := server.New(cfg)
 	if err != nil {
@@ -420,7 +432,7 @@ func TestSetOverwritesExistingSecret(t *testing.T) {
 }
 
 func TestSecretIsolationBetweenUsers(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 	bob := newTestUser(t, "bob")
 
@@ -636,7 +648,7 @@ func TestAuditLogWritten(t *testing.T) {
 }
 
 func TestAuditLogAuthDenied(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	cfg := server.Config{DataDir: dataDir, Admins: nil}
 	srv, err := server.New(cfg)
 	if err != nil {
@@ -712,7 +724,7 @@ func readLines(t *testing.T, path string) []string {
 // testServerSetupMultiUser creates a server with alice (admin) and bob registered.
 func testServerSetupMultiUser(t *testing.T) (addr, dataDir string, alice, bob *testUser) {
 	t.Helper()
-	dataDir = t.TempDir()
+	dataDir = testDataDir(t)
 	alice = newTestUser(t, "alice")
 	bob = newTestUser(t, "bob")
 
@@ -1181,7 +1193,7 @@ func TestAgentTempDirCleanup(t *testing.T) {
 }
 
 func TestHelpIncludesVersion(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 
 	cfg := server.Config{
@@ -1515,7 +1527,7 @@ func TestExpiredAndNonExistentInviteReturnSameError(t *testing.T) {
 }
 
 func TestConnectionRateLimit(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 
 	cfg := server.Config{
@@ -1555,7 +1567,7 @@ func TestConnectionRateLimit(t *testing.T) {
 }
 
 func TestReadLineTimeout(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 
 	cfg := server.Config{
@@ -1632,7 +1644,7 @@ func TestHelpIncludesVaultCommands(t *testing.T) {
 }
 
 func TestShortServerSecretRejected(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 
 	// 63 characters — one short of the 64-character minimum
 	secret63 := strings.Repeat("a", 63)
@@ -1650,7 +1662,7 @@ func TestShortServerSecretRejected(t *testing.T) {
 }
 
 func TestValidServerSecretAccepted(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 
 	// Exactly 64 characters — meets the minimum
 	secret64 := strings.Repeat("a", 64)
@@ -1665,7 +1677,7 @@ func TestValidServerSecretAccepted(t *testing.T) {
 }
 
 func TestSymlinkedAuthorizedKeysRejected(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 	alice := newTestUser(t, "alice")
 
 	cfg := server.Config{DataDir: dataDir, Admins: []string{"alice"}}
@@ -1731,8 +1743,24 @@ func TestSanitizeErrorStripsInternalDetails(t *testing.T) {
 	}
 }
 
+func TestDataDirPermissionsChecked(t *testing.T) {
+	dataDir := t.TempDir() // intentionally NOT testDataDir — we want bad permissions
+	if err := os.Chmod(dataDir, 0755); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	cfg := server.Config{DataDir: dataDir}
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected error for world-readable data directory")
+	}
+	if !strings.Contains(err.Error(), "must not be accessible") {
+		t.Errorf("error = %q, expected message about permissions", err)
+	}
+}
+
 func TestEmptyServerSecretFileRejected(t *testing.T) {
-	dataDir := t.TempDir()
+	dataDir := testDataDir(t)
 
 	// Write an empty server_secret file
 	secretPath := filepath.Join(dataDir, "server_secret")
