@@ -598,10 +598,15 @@ func buildChallenge(serverSecret []byte, username, path string) []byte {
 }
 
 
+const maxVaultNameLength = 64
+
 // ValidateVaultName checks that a vault name is safe and not reserved.
 func ValidateVaultName(name string) error {
 	if name == "" {
 		return fmt.Errorf("vault name cannot be empty")
+	}
+	if len(name) > maxVaultNameLength {
+		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
 	}
 	if name == "personal" {
 		return fmt.Errorf("vault name %q is reserved", name)

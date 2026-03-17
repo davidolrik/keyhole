@@ -347,10 +347,16 @@ func parseMoveCommand(args []string) (Command, error) {
 	}, nil
 }
 
+const maxVaultNameLength = 64
+const maxUsernameLength = 64
+
 // validateVaultRef validates a vault name used in colon-syntax references.
 func validateVaultRef(name string) error {
 	if name == "" {
 		return nil
+	}
+	if len(name) > maxVaultNameLength {
+		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
 	}
 	for _, c := range name {
 		if c == '/' || c == '.' || c == '\\' || c == ':' || c == '\x00' ||
@@ -366,6 +372,9 @@ func validateVaultRef(name string) error {
 func validateVaultName(name string) error {
 	if name == "" {
 		return fmt.Errorf("vault name cannot be empty")
+	}
+	if len(name) > maxVaultNameLength {
+		return fmt.Errorf("vault name exceeds maximum length of %d characters", maxVaultNameLength)
 	}
 	if name == "personal" {
 		return fmt.Errorf("vault name %q is reserved", name)

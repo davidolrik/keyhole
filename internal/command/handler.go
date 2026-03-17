@@ -1068,6 +1068,9 @@ func validateUsername(username string) error {
 	if username == "" {
 		return fmt.Errorf("username cannot be empty")
 	}
+	if len(username) > maxUsernameLength {
+		return fmt.Errorf("username exceeds maximum length of %d characters", maxUsernameLength)
+	}
 	if reservedUsernames[username] {
 		return fmt.Errorf("username %q is reserved", username)
 	}

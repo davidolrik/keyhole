@@ -418,11 +418,13 @@ func loadOrGenerateServerSecret(path string) ([]byte, error) {
 	return secret, nil
 }
 
+const maxUsernameLength = 64
+
 // isValidUsername returns true if username contains only safe characters
 // [a-zA-Z0-9_-]. This prevents path traversal when the username is used
 // in filesystem paths.
 func isValidUsername(username string) bool {
-	if username == "" {
+	if username == "" || len(username) > maxUsernameLength {
 		return false
 	}
 	for _, c := range username {
