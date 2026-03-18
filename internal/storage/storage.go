@@ -111,8 +111,17 @@ func (s *FileStore) secretRoot(username string) string {
 }
 
 // filePath returns the full filesystem path for a user's secret.
+// It validates that the resolved path stays within the user's secret root
+// as a defense-in-depth measure against path traversal.
 func (s *FileStore) filePath(username, secretPath string) string {
-	return filepath.Join(s.secretRoot(username), filepath.FromSlash(secretPath)+".enc")
+	root := s.secretRoot(username)
+	fpath := filepath.Join(root, filepath.FromSlash(secretPath)+".enc")
+	if !strings.HasPrefix(fpath, root+string(filepath.Separator)) {
+		// Return a path that will not resolve to a valid file outside
+		// the root, forcing a clean error from the caller.
+		return filepath.Join(root, "invalid-path")
+	}
+	return fpath
 }
 
 // WriteFileNoFollow creates or truncates a file with O_NOFOLLOW to atomically

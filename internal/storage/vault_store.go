@@ -222,7 +222,12 @@ func (s *FileStore) VaultDirExists(vault string) bool {
 }
 
 func (s *FileStore) vaultDir(vault string) string {
-	return filepath.Join(s.dataDir, "vaults", vault)
+	vaultsRoot := filepath.Join(s.dataDir, "vaults")
+	dir := filepath.Join(vaultsRoot, vault)
+	if !strings.HasPrefix(dir, vaultsRoot+string(filepath.Separator)) {
+		return filepath.Join(vaultsRoot, "invalid-vault")
+	}
+	return dir
 }
 
 func (s *FileStore) vaultSecretsRoot(vault string) string {
@@ -230,7 +235,12 @@ func (s *FileStore) vaultSecretsRoot(vault string) string {
 }
 
 func (s *FileStore) vaultSecretPath(vault, secretPath string) string {
-	return filepath.Join(s.vaultSecretsRoot(vault), filepath.FromSlash(secretPath)+".enc")
+	root := s.vaultSecretsRoot(vault)
+	fpath := filepath.Join(root, filepath.FromSlash(secretPath)+".enc")
+	if !strings.HasPrefix(fpath, root+string(filepath.Separator)) {
+		return filepath.Join(root, "invalid-path")
+	}
+	return fpath
 }
 
 func (s *FileStore) vaultKeyPath(vault, username string) string {
