@@ -18,7 +18,10 @@ Configuration is resolved in precedence order: **defaults < config file < enviro
 | `KEYHOLE_LISTEN`        | Address to listen on                    |
 | `KEYHOLE_DATA_DIR`      | Data directory                          |
 | `KEYHOLE_ADMINS`        | Comma-separated list of admin usernames |
-| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret (minimum 64 characters) |
+
+::: warning DEPRECATED
+`KEYHOLE_SERVER_SECRET` is deprecated and will be removed in a future release. Environment variables are visible through `/proc`, `ps`, and are inherited by child processes. Use the `server_secret` field in your HCL config file (with `0600` permissions) or let keyhole auto-generate the secret file in the data directory instead.
+:::
 
 ## Config file (HCL)
 

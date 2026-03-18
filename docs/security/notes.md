@@ -34,7 +34,11 @@ Both user invite codes and vault invite tokens expire after 72 hours. Expired in
 
 ## Server secret
 
-The server secret must be at least 64 characters. The server will refuse to start with a shorter value. On first run, keyhole auto-generates a 64-character alphanumeric secret; if you provide your own via `KEYHOLE_SERVER_SECRET` or the config file, it must meet the same minimum length.
+The server secret must be at least 64 characters. The server will refuse to start with a shorter value. On first run, keyhole auto-generates a 64-character alphanumeric secret; if you provide your own via the config file, it must meet the same minimum length.
+
+::: warning DEPRECATED
+`KEYHOLE_SERVER_SECRET` is deprecated and will be removed in a future release. Environment variables are visible through `/proc`, `ps`, and are inherited by child processes. Use the `server_secret` field in your HCL config file (with `0600` permissions) or let keyhole auto-generate the secret file in the data directory instead.
+:::
 
 ::: danger
 Store `server_secret` somewhere safe and separate from the data directory. Without it, every stored secret is permanently inaccessible.

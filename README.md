@@ -87,7 +87,6 @@ services:
       - KEYHOLE_LISTEN=:2222
       - KEYHOLE_DATA_DIR=/data
       - KEYHOLE_ADMINS=alice
-      - KEYHOLE_SERVER_SECRET=
 ```
 
 ### First run
@@ -119,7 +118,8 @@ Configuration is resolved in precedence order: **defaults < config file < enviro
 | `KEYHOLE_LISTEN`  | Address to listen on                                     |
 | `KEYHOLE_DATA_DIR`| Data directory                                           |
 | `KEYHOLE_ADMINS`  | Comma-separated list of admin usernames                  |
-| `KEYHOLE_SERVER_SECRET` | Alphanumeric server secret (minimum 64 characters) |
+
+> **Deprecated:** `KEYHOLE_SERVER_SECRET` is deprecated and will be removed in a future release. Environment variables are visible through `/proc`, `ps`, and are inherited by child processes. Use `server_secret` in your HCL config file or let keyhole auto-generate it.
 
 ### Config file (HCL)
 

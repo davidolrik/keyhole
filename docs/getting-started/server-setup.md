@@ -20,8 +20,11 @@ services:
       - KEYHOLE_LISTEN=:2222
       - KEYHOLE_DATA_DIR=/data
       - KEYHOLE_ADMINS=alice
-      - KEYHOLE_SERVER_SECRET=
 ```
+
+::: warning
+Do **not** pass the server secret via `KEYHOLE_SERVER_SECRET`. This environment variable is deprecated — environment variables are visible through `/proc`, `ps`, and are inherited by child processes. Let keyhole auto-generate the secret file on first run, or mount an HCL config file with `server_secret` set.
+:::
 
 ## First run
 
