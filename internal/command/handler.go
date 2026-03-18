@@ -1021,8 +1021,11 @@ func decryptVaultSecret(vaultKey []byte, path string, serverSecret, ciphertext [
 		// Perform equivalent work to the legacy fallback path below so that
 		// both paths take similar time, preventing timing side-channels that
 		// reveal which key derivation scheme was used.
-		crypto.DeriveVaultSecretKeyLegacy(vaultKey, path)
-		crypto.DecryptWithKey(secretKey, ciphertext)
+		dummyKey, _ := crypto.DeriveVaultSecretKeyLegacy(vaultKey, path)
+		if dummyKey != nil {
+			crypto.DecryptWithKey(dummyKey, ciphertext)
+			crypto.Zeroize(dummyKey)
+		}
 		crypto.Zeroize(secretKey)
 		return plaintext, nil
 	}
