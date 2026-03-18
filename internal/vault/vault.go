@@ -369,8 +369,8 @@ func (m *Manager) Accept(name, username, token string, ag agent.ExtendedAgent, p
 		// Perform equivalent work to the legacy fallback path above so that
 		// both paths take similar time, preventing timing side-channels that
 		// reveal which token key derivation scheme was used.
-		dummyKey, _ := deriveTokenKeyWithSalt(tokenRaw, nil, name, username)
-		if dummyKey != nil {
+		dummyKey, dummyErr := deriveTokenKeyWithSalt(tokenRaw, nil, name, username)
+		if dummyErr == nil {
 			crypto.DecryptWithKey(dummyKey, wrappedWithToken)
 			crypto.Zeroize(dummyKey)
 		}
