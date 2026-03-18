@@ -196,7 +196,9 @@ func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey
 	newWrapped, encErr := crypto.EncryptWithKey(wrappingKey, vaultKey)
 	crypto.Zeroize(wrappingKey)
 	if encErr == nil {
-		m.store.WriteVaultKey(name, username, newWrapped)
+		if writeErr := m.store.WriteVaultKey(name, username, newWrapped); writeErr != nil {
+			log.Printf("warning: failed to re-wrap vault key for %s in vault %s: %v", username, name, writeErr)
+		}
 	}
 
 	return vaultKey, nil
