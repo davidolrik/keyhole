@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 const maxLogSize = 10 * 1024 * 1024 // 10MB
@@ -45,7 +46,7 @@ func NewLogger(dataDir string) (*Logger, error) {
 		}
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
