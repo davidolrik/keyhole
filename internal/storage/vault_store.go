@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const maxMetadataSize = 1024 * 1024  // 1MB limit for metadata files
@@ -196,18 +197,21 @@ func (s *FileStore) ListVaults() ([]string, error) {
 }
 
 // DeleteVault removes an entire vault directory and all its contents.
-// It rejects symlinked vault directories to prevent a TOCTOU attack
-// where the directory is replaced with a symlink between validation
-// and deletion.
+// It opens the directory with O_NOFOLLOW to atomically reject symlinks,
+// preventing a TOCTOU attack where the directory is replaced with a
+// symlink between validation and deletion.
 func (s *FileStore) DeleteVault(vault string) error {
 	vaultPath := s.vaultDir(vault)
-	info, err := os.Lstat(vaultPath)
+	// Open with O_NOFOLLOW to atomically verify the path is not a symlink.
+	// This eliminates the TOCTOU window between a stat check and RemoveAll.
+	fd, err := syscall.Open(vaultPath, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
-		return err
+		if err == syscall.ELOOP {
+			return fmt.Errorf("vault directory is a symlink")
+		}
+		return &os.PathError{Op: "open", Path: vaultPath, Err: err}
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("vault directory is a symlink")
-	}
+	syscall.Close(fd)
 	return os.RemoveAll(vaultPath)
 }
 
