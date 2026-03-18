@@ -261,11 +261,11 @@ func (s *Server) publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		s.auditLog.AuthDenied(username, remote, "symlink detected in authorized_keys path")
 		return false
 	}
-	data, err := os.ReadFile(authKeysPath)
+	data, err := storage.ReadFileNoFollow(authKeysPath, 64*1024)
 	if err == nil && checkAuthorizedKeys(data, key) {
 		ctx.SetValue(keyVerifiedKey, true)
 	}
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && err != storage.ErrNotFound {
 		log.Printf("auth: error reading authorized_keys for %q: %v", username, err)
 		s.auditLog.AuthDenied(username, remote, "error reading authorized_keys")
 		return false
