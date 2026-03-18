@@ -134,3 +134,22 @@ func ParseAdmins(s string) []string {
 	}
 	return out
 }
+
+// ValidateAdmins checks that all admin usernames contain only safe characters
+// [a-zA-Z0-9_-]. Returns an error for the first invalid username found.
+func ValidateAdmins(admins []string) error {
+	for _, name := range admins {
+		if name == "" {
+			return fmt.Errorf("admin username cannot be empty")
+		}
+		if len(name) > 64 {
+			return fmt.Errorf("admin username %q exceeds maximum length of 64 characters", name)
+		}
+		for _, c := range name {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+				return fmt.Errorf("admin username %q contains invalid character %q", name, c)
+			}
+		}
+	}
+	return nil
+}

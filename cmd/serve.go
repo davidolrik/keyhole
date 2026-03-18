@@ -77,6 +77,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Merge: defaults < file < env < cli
 	cfg := config.Merge(defaults, fileCfg, envCfg, cliCfg)
 
+	if err := config.ValidateAdmins(cfg.Admins); err != nil {
+		return fmt.Errorf("invalid admin config: %w", err)
+	}
+
 	serverSecret := []byte(cfg.ServerSecret)
 	cfg.ServerSecret = ""
 
