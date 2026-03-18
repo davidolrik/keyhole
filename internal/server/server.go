@@ -379,14 +379,21 @@ func (s *Server) sessionHandler(sess ssh.Session, handler *command.Handler) {
 
 // sanitizeError returns only the outermost error message, stripping wrapped
 // internal details that could leak implementation information to SSH clients.
+// For fmt.Errorf("context: %w", err) the outer context is the prefix before
+// the ": " that precedes the wrapped error's text. If the wrapped text does
+// not appear as a suffix (unexpected format), the full string is returned to
+// avoid silently truncating useful information.
 func sanitizeError(err error) string {
-	if wrapped := errors.Unwrap(err); wrapped != nil {
-		// Strip the wrapped cause — return only the outer context.
-		full := err.Error()
-		suffix := ": " + wrapped.Error()
-		return strings.TrimSuffix(full, suffix)
+	wrapped := errors.Unwrap(err)
+	if wrapped == nil {
+		return err.Error()
 	}
-	return err.Error()
+	full := err.Error()
+	suffix := ": " + wrapped.Error()
+	if strings.HasSuffix(full, suffix) {
+		return full[:len(full)-len(suffix)]
+	}
+	return full
 }
 
 // checkDataDirPermissions warns if the data directory is accessible by group or others.
