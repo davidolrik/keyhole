@@ -171,8 +171,10 @@ func (m *Manager) VaultKey(name, username string, ag agent.ExtendedAgent, pubKey
 		// both paths take similar time, preventing timing side-channels that
 		// reveal which wrapping key derivation scheme was used.
 		dummyLegacyKey, _ := m.deriveWrappingKeyLegacy(username, name, ag, pubKey)
-		crypto.DecryptWithKey(wrappingKey, wrappedKey)
-		crypto.Zeroize(dummyLegacyKey)
+		if dummyLegacyKey != nil {
+			crypto.DecryptWithKey(dummyLegacyKey, wrappedKey)
+			crypto.Zeroize(dummyLegacyKey)
+		}
 		crypto.Zeroize(wrappingKey)
 		return vaultKey, nil
 	}
