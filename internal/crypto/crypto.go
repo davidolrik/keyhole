@@ -64,7 +64,11 @@ func (e *Encryptor) DecryptAndUpgrade(ag agent.ExtendedAgent, pubKey ssh.PublicK
 		// Perform equivalent work to the legacy fallback path below so that
 		// both paths take similar time, preventing timing side-channels that
 		// reveal which key derivation scheme was used.
-		e.deriveKeyWithSalt(ag, pubKey, serverSecret, username, path, nil)
+		dummyKey, _ := e.deriveKeyWithSalt(ag, pubKey, serverSecret, username, path, nil)
+		if dummyKey != nil {
+			DecryptWithKey(dummyKey, ciphertext)
+			Zeroize(dummyKey)
+		}
 		return plaintext, nil
 	}
 
